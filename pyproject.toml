@@ -7,7 +7,7 @@ name = "istadash"
 version = "0.1.0"
 description = "Local energy dashboard for ista UK heat meter readings"
 readme = "README.md"
-license = { text = "MIT" }
+license = { file = "LICENSE" }
 requires-python = ">=3.12"
 authors = [{ name = "Asad Islam", email = "asadislam94@gmail.com" }]
 classifiers = [
@@ -67,6 +67,7 @@ author_email = "asadislam94@gmail.com"
 [tool.briefcase.app.istadash]
 formal_name = "IstaDash"
 description = "Local energy dashboard for ista UK heat meter readings"
+long_description = "IstaDash reads your ista UK heat meter data and displays usage history in a local web dashboard."
 # 'app' package is the source; __main__.py is the entry point
 sources = ["istadash"]
 main = "istadash"
