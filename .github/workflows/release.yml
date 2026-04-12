@@ -26,6 +26,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history needed to check branch ancestry
+
+      - name: Ensure tag is on master
+        shell: bash
+        run: |
+          git fetch origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::Tag '$GITHUB_REF_NAME' is not reachable from master. Aborting release."
+            exit 1
+          }
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
