@@ -18,6 +18,15 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install system libraries
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libnspr4 libnss3 libgbm1 libasound2t64 libxkbfile1 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-shape0 \
+            libxcb-xkb1 libxkbcommon-x11-0 libxrandr2 \
+            libxcomposite1 libegl1
+
       - name: Install dependencies
         run: uv sync --extra dev
 
