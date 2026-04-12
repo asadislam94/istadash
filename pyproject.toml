@@ -20,7 +20,7 @@ dependencies = [
     "beautifulsoup4>=4.12.3",
     "Flask>=3.1.0",
     "keyring>=25.6.0",
-    "pywebview[qt]>=5.0",
+    "pywebview[qt]>=6.0",
     "requests>=2.32.3",
 ]
 
@@ -74,12 +74,9 @@ requires = [
     "beautifulsoup4>=4.12.3",
     "Flask>=3.1.0",
     "keyring>=25.6.0",
-    "pywebview[qt]>=5.0",
+    "pywebview[qt]>=6.0",
     "requests>=2.32.3",
 ]
-
-# Qt WebEngine wheels are self-contained — no system webkit/webview libraries needed
-[tool.briefcase.app.istadash.macOS]
 
 [tool.briefcase.app.istadash.linux]
 
