@@ -19,6 +19,12 @@ from flask import (
     url_for,
 )
 
+from istadash.config import Settings
+from istadash.ista_client import AuthenticationError, AuthorizationExpiredError, IstaClient
+from istadash.security import clear_session_cookie, load_session_cookie, save_session_cookie
+from istadash.services.sync import run_sync
+from istadash.storage import Storage
+
 # ---------------------------------------------------------------------------
 # File-based logging – persists across page reloads
 # ---------------------------------------------------------------------------
@@ -39,12 +45,6 @@ def _setup_log_capture() -> None:
     handler.setLevel(logging.DEBUG)
     root.addHandler(handler)
     root.setLevel(logging.DEBUG)
-
-from istadash.config import Settings
-from istadash.ista_client import AuthenticationError, AuthorizationExpiredError, IstaClient
-from istadash.security import clear_session_cookie, load_session_cookie, save_session_cookie
-from istadash.services.sync import run_sync
-from istadash.storage import Storage
 
 PENDING_LOGINS: dict[str, dict] = {}
 PENDING_TTL_MINUTES = 10
@@ -343,7 +343,7 @@ def create_app() -> Flask:
         n = min(int(request.args.get("n", 200)), 2000)
         try:
             text = LOG_FILE.read_text(encoding="utf-8", errors="replace")
-            all_lines = [l for l in text.splitlines() if l.strip()]
+            all_lines = [ln for ln in text.splitlines() if ln.strip()]
             total = len(all_lines)
             lines = all_lines[-n:]
         except FileNotFoundError:
