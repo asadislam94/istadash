@@ -58,7 +58,8 @@ def create_app() -> Flask:
     def login_page():
         if require_onboarded_session():
             return redirect(url_for("index"))
-        return render_template("login.html", stage="credentials", properties=[], meters=[], login_id=None)
+        from istadash.security import _has_keyring
+        return render_template("login.html", stage="credentials", properties=[], meters=[], login_id=None, no_keyring=not _has_keyring())
 
     @app.post("/login/start")
     def login_start():

@@ -26,6 +26,15 @@
                 {% endif %}
             {% endwith %}
 
+            {% if no_keyring %}
+                <article class="message warning">
+                    <strong>No secure keyring detected.</strong>
+                    Your session token will be stored in a plain file instead of the OS credential vault.
+                    For secure storage, install a Secret Service daemon such as
+                    <code>gnome-keyring</code> or <code>kwallet</code>.
+                </article>
+            {% endif %}
+
             {% if stage == 'credentials' %}
                 <form method="post" action="{{ url_for('login_start') }}" class="login-form">
                     <label>

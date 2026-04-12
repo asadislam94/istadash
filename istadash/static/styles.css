@@ -370,6 +370,16 @@ h2 {
     background: rgba(198, 79, 58, 0.12);
 }
 
+.message.warning {
+    background: rgba(180, 120, 20, 0.12);
+    border-color: rgba(180, 120, 20, 0.35);
+}
+
+.message.warning code {
+    font-family: monospace;
+    font-size: 0.85em;
+}
+
 
 
 .stat-card {
