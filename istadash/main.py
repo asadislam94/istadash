@@ -30,6 +30,8 @@ def _setup_log_capture() -> None:
     root = logging.getLogger()
     if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
         return
+    # Truncate on startup so each run starts with a clean log.
+    LOG_FILE.write_text("", encoding="utf-8")
     handler = logging.handlers.RotatingFileHandler(
         LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8"
     )
