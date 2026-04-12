@@ -13,26 +13,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
 
-      - name: Install system libraries for PyQt6 WebEngine (Linux only)
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends \
-            libnspr4 libnss3 libgbm1 libxcomposite1 \
-            libxkbcommon0 libxkbcommon-x11-0 libxrandr2 \
-            libasound2t64 libxkbfile1 \
-            libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
-            libxcb-shape0 libxcb-xkb1
-
       - name: Install dependencies
-        run: pip install -e ".[dev]"
+        run: uv sync --extra dev
 
       - name: Lint
-        run: ruff check istadash tests
+        run: uv run ruff check istadash tests
 
       - name: Test
-        run: pytest --tb=short
+        run: uv run pytest --tb=short

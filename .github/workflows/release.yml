@@ -27,21 +27,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
 
-      - name: Install Briefcase
-        run: pip install briefcase
+      - name: Install dependencies
+        run: uv sync --extra dev
 
-      # briefcase create: set up the platform-specific app scaffold
-      # briefcase build: compile / collect everything into the app bundle
-      # briefcase package: produce the final installer (AppImage / MSI / DMG)
       - name: Package app
         run: |
-          briefcase create ${{ matrix.platform }}
-          briefcase build ${{ matrix.platform }}
-          briefcase package ${{ matrix.platform }}
+          uv run briefcase create ${{ matrix.platform }}
+          uv run briefcase build ${{ matrix.platform }}
+          uv run briefcase package ${{ matrix.platform }}
 
       - name: Upload installer artifact
         uses: actions/upload-artifact@v4

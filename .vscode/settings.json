@@ -1,5 +1,5 @@
 {
-  // ── Python interpreter ───────────────────────────────────────────────────
+  // ── Python interpreter (uv creates .venv here by default) ────────────────
   "python.defaultInterpreterPath": "${workspaceFolder}/.venv/bin/python",
 
   // ── Linting & formatting (ruff) ──────────────────────────────────────────
@@ -13,7 +13,7 @@
   },
   "ruff.interpreter": ["${workspaceFolder}/.venv/bin/python"],
 
-  // ── Testing ──────────────────────────────────────────────────────────────
+  // ── Testing — uses uv-managed .venv ──────────────────────────────────────
   "python.testing.pytestEnabled": true,
   "python.testing.pytestPath": "${workspaceFolder}/.venv/bin/pytest",
   "python.testing.pytestArgs": ["--tb=short"],
@@ -30,6 +30,7 @@
     "**/*.egg-info": true,
     ".briefcase": true,
     "build": true,
-    "dist": true
+    "dist": true,
+    "logs": true
   }
 }

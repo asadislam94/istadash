@@ -5,7 +5,7 @@
     {
       "label": "Test",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/python -m pytest --tb=short -v",
+      "command": "uv run pytest --tb=short -v",
       "group": {
         "kind": "test",
         "isDefault": true
@@ -16,7 +16,7 @@
     {
       "label": "Lint",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/ruff check istadash tests",
+      "command": "uv run ruff check istadash tests",
       "group": "test",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []
@@ -24,16 +24,16 @@
     {
       "label": "Lint: fix",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/ruff check istadash tests --fix",
+      "command": "uv run ruff check istadash tests --fix",
       "group": "test",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []
     },
     // ── Briefcase build tasks ─────────────────────────────────────────────
     {
-      "label": "Briefcase: dev (current platform)",
+      "label": "Briefcase: dev",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/briefcase dev",
+      "command": "uv run briefcase dev",
       "group": "build",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []
@@ -41,7 +41,7 @@
     {
       "label": "Briefcase: create (Linux)",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/briefcase create linux",
+      "command": "uv run briefcase create linux",
       "group": "build",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []
@@ -49,7 +49,7 @@
     {
       "label": "Briefcase: build (Linux)",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/briefcase build linux",
+      "command": "uv run briefcase build linux",
       "group": "build",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": [],
@@ -58,7 +58,7 @@
     {
       "label": "Briefcase: package (Linux)",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/briefcase package linux",
+      "command": "uv run briefcase package linux",
       "group": {
         "kind": "build",
         "isDefault": true
@@ -70,7 +70,42 @@
     {
       "label": "Briefcase: update (Linux)",
       "type": "shell",
-      "command": "${workspaceFolder}/.venv/bin/briefcase update linux",
+      "command": "uv run briefcase update linux",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    // ── Briefcase Windows packaging tasks (run these on Windows) ─────────
+    {
+      "label": "Briefcase: create (Windows)",
+      "type": "shell",
+      "command": "uv run briefcase create windows",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Briefcase: build (Windows)",
+      "type": "shell",
+      "command": "uv run briefcase build windows",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": [],
+      "dependsOn": "Briefcase: create (Windows)"
+    },
+    {
+      "label": "Briefcase: package (Windows)",
+      "type": "shell",
+      "command": "uv run briefcase package windows",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": [],
+      "dependsOn": "Briefcase: build (Windows)"
+    },
+    {
+      "label": "Briefcase: update (Windows)",
+      "type": "shell",
+      "command": "uv run briefcase update windows",
       "group": "build",
       "presentation": { "reveal": "always", "panel": "shared" },
       "problemMatcher": []

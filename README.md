@@ -105,7 +105,8 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
 ### Prerequisites
 
-- Python 3.11 or 3.12
+- Python 3.12
+- [uv](https://docs.astral.sh/uv/) — fast Python package manager
 - [VS Code](https://code.visualstudio.com/) (recommended — full config included)
 - **Linux only:** Qt WebEngine system libraries (required for the desktop window to work when running from source):
   ```bash
@@ -116,24 +117,27 @@ Then open [http://127.0.0.1:8000](http://127.0.0.1:8000).
     libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 \
     libxcb-shape0 libxcb-xkb1
   ```
-  > These are only needed when running directly from source (i.e. `python -m istadash`). The packaged AppImage bundles everything.
+  > These are only needed when running directly from source. The packaged AppImage bundles everything.
 
-### 1 — Clone and create the virtual environment
+### 1 — Install uv
+
+```bash
+# Linux / macOS
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+```
+
+### 2 — Clone and sync dependencies
 
 ```bash
 git clone https://github.com/asadislam94/istadash.git
 cd istadash
-python3 -m venv .venv
-source .venv/bin/activate   # Windows: .venv\Scripts\Activate.ps1
+uv sync --extra dev
 ```
 
-### 2 — Install with dev extras
-
-```bash
-pip install -e ".[dev]"
-```
-
-This installs the app in editable mode plus `pytest`, `ruff`, and `briefcase`.
+`uv sync` creates `.venv/` and installs all dependencies (including `pytest`, `ruff`, and `briefcase`) from `uv.lock`.
 
 ### 3 — Open in VS Code
 
@@ -153,10 +157,11 @@ VS Code will prompt you to install the recommended extensions (Python, Ruff, Jin
 | **Briefcase: create (Linux)** | Scaffold the Linux app bundle |
 | **Briefcase: build (Linux)** | Build the bundle (auto-creates first) |
 | **Briefcase: update (Linux)** | Sync source changes into an existing bundle |
-| **Briefcase: dev** | Run the packaged app in Briefcase dev mode |
-| **Test** *(default test)* | Run pytest |
-| **Lint** | Run ruff check |
-| **Lint: fix** | Run ruff check --fix |
+| **Briefcase: package (Windows)** | Full Windows pipeline (run on Windows) |
+| **Briefcase: dev** | Run the app via Briefcase dev mode |
+| **Test** *(default test)* | Run pytest via uv |
+| **Lint** | Run ruff check via uv |
+| **Lint: fix** | Run ruff check --fix via uv |
 
 ### VS Code launch configs (F5 / Run & Debug panel)
 
@@ -169,28 +174,28 @@ VS Code will prompt you to install the recommended extensions (Python, Ruff, Jin
 ### Running tests manually
 
 ```bash
-.venv/bin/python -m pytest --tb=short -v
+uv run pytest --tb=short -v
 ```
 
 ### Linting manually
 
 ```bash
-.venv/bin/ruff check istadash tests        # check
-.venv/bin/ruff check istadash tests --fix  # auto-fix
+uv run ruff check istadash tests        # check
+uv run ruff check istadash tests --fix  # auto-fix
 ```
 
 ---
 
 ## Building installers
 
-Installers are produced with [Briefcase](https://briefcase.readthedocs.io/).
+Installers are produced with [Briefcase](https://briefcase.readthedocs.io/) via uv.
 
 ### Linux
 
 ```bash
-.venv/bin/briefcase create linux
-.venv/bin/briefcase build linux
-.venv/bin/briefcase package linux
+uv run briefcase create linux
+uv run briefcase build linux
+uv run briefcase package linux
 ```
 
 Output: `dist/` directory containing an AppImage or system package.
@@ -198,17 +203,17 @@ Output: `dist/` directory containing an AppImage or system package.
 ### macOS
 
 ```bash
-briefcase create macos
-briefcase build macos
-briefcase package macos
+uv run briefcase create macos
+uv run briefcase build macos
+uv run briefcase package macos
 ```
 
 ### Windows
 
 ```powershell
-briefcase create windows
-briefcase build windows
-briefcase package windows
+uv run briefcase create windows
+uv run briefcase build windows
+uv run briefcase package windows
 ```
 
 > Cross-compilation is not supported. Build each platform on its corresponding OS (or use the GitHub Actions release workflow — see `.github/workflows/release.yml`).
