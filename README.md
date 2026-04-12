@@ -1,5 +1,8 @@
 # IstaDash
 
+> [!NOTE]
+> This project was built through AI-assisted vibe coding!
+
 Local energy dashboard for syncing heat meter readings from the [My ista UK portal](https://myista.co.uk) to your machine, with a clean visual dashboard — all in a self-contained native desktop window.
 
 - **No cloud, no subscription.** Data is stored locally in SQLite.
