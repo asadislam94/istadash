@@ -68,6 +68,7 @@ author_email = "asadislam94@gmail.com"
 formal_name = "IstaDash"
 description = "Local energy dashboard for ista UK heat meter readings"
 long_description = "IstaDash reads your ista UK heat meter data and displays usage history in a local web dashboard."
+icon = "icons/icon"
 # 'app' package is the source; __main__.py is the entry point
 sources = ["istadash"]
 main = "istadash"

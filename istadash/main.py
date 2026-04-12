@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import logging.handlers
 import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -23,8 +25,31 @@ from istadash.security import clear_session_cookie, load_session_cookie, save_se
 from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
+# ---------------------------------------------------------------------------
+# File-based logging – persists across page reloads
+# ---------------------------------------------------------------------------
+LOG_FILE = Path.home() / ".local" / "share" / "istadash" / "istadash.log"
+
+
+def _setup_log_capture() -> None:
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    root = logging.getLogger()
+    if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
+        return
+    # Truncate on startup so each run starts with a clean log.
+    LOG_FILE.write_text("", encoding="utf-8")
+    handler = logging.handlers.RotatingFileHandler(
+        LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8"
+    )
+    handler.setFormatter(logging.Formatter("%(asctime)s  %(levelname)-8s  %(name)s — %(message)s"))
+    handler.setLevel(logging.DEBUG)
+    root.addHandler(handler)
+    root.setLevel(logging.DEBUG)
+
 PENDING_LOGINS: dict[str, dict] = {}
 PENDING_TTL_MINUTES = 10
+
+log = logging.getLogger(__name__)
 
 
 def create_app() -> Flask:
@@ -33,6 +58,7 @@ def create_app() -> Flask:
     app.config["SECRET_KEY"] = settings.flask_secret_key
     app.config["SETTINGS"] = settings
     app.config["STORAGE"] = Storage(settings.database_path)
+    _setup_log_capture()
 
     def cleanup_pending_logins() -> None:
         cutoff = datetime.now(UTC) - timedelta(minutes=PENDING_TTL_MINUTES)
@@ -74,10 +100,12 @@ def create_app() -> Flask:
         try:
             client.login_with_credentials(username=username, password=password)
             properties = active_properties_only(client.get_properties())
-        except AuthenticationError:
+        except AuthenticationError as exc:
+            log.warning("login_start: authentication rejected for %s — %s", username, exc)
             flash("Login failed. Check your credentials and try again.", "error")
             return redirect(url_for("login_page"))
         except Exception as exc:
+            log.exception("login_start: unexpected error for %s", username)
             flash(f"Unable to start login: {exc}", "error")
             return redirect(url_for("login_page"))
 
@@ -126,6 +154,7 @@ def create_app() -> Flask:
             )
             meters = active_meters_only(client.get_meters())
         except Exception as exc:
+            log.exception("login_select_meter: error loading meters")
             flash(f"Unable to load meters: {exc}", "error")
             return redirect(url_for("login_page"))
 
@@ -176,6 +205,7 @@ def create_app() -> Flask:
                 scope=property_scope,
             )
         except Exception as exc:
+            log.exception("login_complete: error during credential re-auth")
             flash(f"Unable to complete login: {exc}", "error")
             return redirect(url_for("login_page"))
 
@@ -200,6 +230,7 @@ def create_app() -> Flask:
                     "success",
                 )
             except Exception as exc:
+                log.exception("login_complete: initial auto-refresh failed")
                 flash(
                     "Login complete, but initial auto-refresh failed. "
                     f"You can retry from the dashboard. Details: {exc}",
@@ -253,11 +284,13 @@ def create_app() -> Flask:
         storage: Storage = app.config["STORAGE"]
         try:
             report = run_sync(settings, storage, session_cookie=token)
-        except AuthorizationExpiredError:
+        except AuthorizationExpiredError as exc:
+            log.warning("refresh: session expired — %s", exc)
             clear_session_cookie()
             flash("Session expired. Please log in again.", "error")
             return redirect(url_for("login_page"))
         except Exception as exc:
+            log.exception("refresh: unexpected error during sync")
             flash(f"Refresh failed: {exc}", "error")
             return redirect(url_for("index"))
 
@@ -303,6 +336,20 @@ def create_app() -> Flask:
             mimetype="application/json",
             headers={"Content-Disposition": "attachment; filename=usage.json"},
         )
+
+    @app.get("/logs")
+    def logs_read():
+        """Return the last N lines of the log file plus total line count."""
+        n = min(int(request.args.get("n", 200)), 2000)
+        try:
+            text = LOG_FILE.read_text(encoding="utf-8", errors="replace")
+            all_lines = [ln for ln in text.splitlines() if ln.strip()]
+            total = len(all_lines)
+            lines = all_lines[-n:]
+        except FileNotFoundError:
+            total = 0
+            lines = []
+        return Response(json.dumps({"lines": lines, "total": total}), mimetype="application/json")
 
     return app
 

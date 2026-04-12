@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import csv
+import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterable, Iterator
+
+log = logging.getLogger(__name__)
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS meters (
@@ -51,6 +54,7 @@ class Storage:
     def __init__(self, database_path: Path):
         self.database_path = Path(database_path)
         self.database_path.parent.mkdir(parents=True, exist_ok=True)
+        log.debug("Storage: initialising database at %s", self.database_path)
         self._init_schema()
 
     @contextmanager
@@ -100,7 +104,9 @@ class Storage:
                 "INSERT INTO sync_runs (started_at, status) VALUES (?, ?)",
                 (started_at, "running"),
             )
-            return int(cursor.lastrowid)
+            run_id = int(cursor.lastrowid)
+            log.info("create_sync_run: started run #%d at %s", run_id, started_at)
+            return run_id
 
     def finish_sync_run(
         self,
@@ -114,6 +120,10 @@ class Storage:
         export_path: str | None,
         finished_at: str,
     ) -> None:
+        log.info(
+            "finish_sync_run: run #%d → %s (fetched=%d inserted=%d)",
+            sync_run_id, status, fetched_count, inserted_count,
+        )
         with self.connect() as connection:
             connection.execute(
                 """
@@ -182,6 +192,7 @@ class Storage:
                     row,
                 )
                 inserted += cursor.rowcount
+        log.debug("insert_readings: %d new rows inserted out of %d", inserted, len(rows))
         return inserted
 
     def query_readings(

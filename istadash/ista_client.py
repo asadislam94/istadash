@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
 
 from istadash.config import Settings
+
+log = logging.getLogger(__name__)
 
 
 class IstaError(RuntimeError):
@@ -50,6 +53,7 @@ class IstaClient:
             self.session.cookies.set(self.SESSION_COOKIE_NAME, session_cookie, domain="myista.co.uk")
 
     def login_with_credentials(self, *, username: str, password: str, scope: str | None = None) -> bool:
+        log.debug("login_with_credentials: fetching login page")
         response = self.session.get(
             f"{self.settings.base_url}/auth/login",
             timeout=self.settings.request_timeout_seconds,
@@ -62,8 +66,11 @@ class IstaClient:
         if scope:
             payload["scope"] = scope
 
+        log.debug("login_with_credentials: posting credentials (scope=%s)", scope)
         if not self._post_login_token(payload):
+            log.warning("login_with_credentials: server returned false — credentials rejected")
             raise AuthenticationError("ista login was rejected")
+        log.info("login_with_credentials: succeeded (scope=%s)", scope)
         return True
 
     def has_active_session(self) -> bool:
@@ -197,18 +204,22 @@ class IstaClient:
             timeout=self.settings.request_timeout_seconds,
         )
         if response.status_code in (401, 403):
+            log.warning("_request_json %s %s — HTTP %s (authorization expired)", method, path, response.status_code)
             raise AuthorizationExpiredError("ista authorization expired")
         response.raise_for_status()
         try:
             payload = response.json()
         except ValueError as exc:
             preview = response.text[:250].strip().replace("\n", " ")
+            log.error("_request_json %s %s — non-JSON response: %s", method, path, preview)
             raise IstaError(f"non-JSON response from {path}: {preview}") from exc
 
         status_code = payload.get("StatusCode")
         if status_code in (401, 403):
+            log.warning("_request_json %s %s — payload StatusCode %s (authorization expired)", method, path, status_code)
             raise AuthorizationExpiredError("ista authorization expired")
         if status_code not in (None, 200):
             message = payload.get("Message") or payload.get("Error") or json.dumps(payload)[:250]
+            log.error("_request_json %s %s — StatusCode %s: %s", method, path, status_code, message)
             raise IstaError(f"ista request to {path} failed with status {status_code}: {message}")
         return payload

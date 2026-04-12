@@ -1,5 +1,7 @@
 # IstaDash
 
+<img src="icons/icon-128.png" alt="IstaDash icon" width="96">
+
 > [!NOTE]
 > This project was built through AI-assisted vibe coding!
 

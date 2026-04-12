@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -9,6 +10,8 @@ from typing import Any
 from istadash.config import Settings
 from istadash.ista_client import IstaClient
 from istadash.storage import Storage
+
+log = logging.getLogger(__name__)
 
 
 def utc_now_iso() -> str:
@@ -75,6 +78,7 @@ class SyncReport:
 def run_sync(settings: Settings, storage: Storage, *, session_cookie: str) -> SyncReport:
     started_at = utc_now_iso()
     sync_run_id = storage.create_sync_run(started_at)
+    log.info("run_sync: started (run #%d, meter_id=%s)", sync_run_id, settings.meter_id)
 
     selected_meter = None
     fetched_count = 0
@@ -84,11 +88,15 @@ def run_sync(settings: Settings, storage: Storage, *, session_cookie: str) -> Sy
     try:
         client = IstaClient(settings, session_cookie=session_cookie)
         meters = [normalise_meter(meter, debug_raw_payloads=settings.debug_raw_payloads) for meter in client.get_meters()]
+        log.debug("run_sync: got %d meters from API", len(meters))
         storage.upsert_meters(meters, seen_at=started_at)
 
         selected_meter = client.select_meter(meters)
+        log.info("run_sync: selected meter %s (%s)", selected_meter.get("MeterID"), selected_meter.get("TypeDescription"))
+
         raw_reads = client.fetch_meter_reads(int(selected_meter["MeterID"]))
         fetched_count = len(raw_reads)
+        log.info("run_sync: fetched %d raw reads from API", fetched_count)
 
         readings = [
             normalise_reading(
@@ -100,8 +108,10 @@ def run_sync(settings: Settings, storage: Storage, *, session_cookie: str) -> Sy
             for raw in raw_reads
         ]
         inserted_count = storage.insert_readings(readings)
+        log.info("run_sync: inserted %d new readings", inserted_count)
 
         export_path = storage.export_readings_csv(settings.export_dir / "readings.csv")
+        log.debug("run_sync: exported CSV to %s", export_path)
         storage.finish_sync_run(
             sync_run_id,
             status="success",
@@ -122,6 +132,7 @@ def run_sync(settings: Settings, storage: Storage, *, session_cookie: str) -> Sy
             property_scope=settings.property_scope,
         )
     except Exception as exc:
+        log.exception("run_sync: failed on run #%d — %s", sync_run_id, exc)
         storage.finish_sync_run(
             sync_run_id,
             status="failed",
