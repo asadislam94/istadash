@@ -78,9 +78,6 @@ requires = [
     "requests>=2.32.3",
 ]
 
-# Qt WebEngine wheels are self-contained — no system webkit/webview libraries needed
-[tool.briefcase.app.istadash.macOS]
-
 [tool.briefcase.app.istadash.linux]
 
 [tool.briefcase.app.istadash.windows]
