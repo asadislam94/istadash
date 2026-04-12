@@ -1,0 +1,2 @@
+"""IstaDash application package."""
+

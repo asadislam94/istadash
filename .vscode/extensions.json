@@ -1,0 +1,15 @@
+{
+  "recommendations": [
+    // Python language support + debugger
+    "ms-python.python",
+    "ms-python.debugpy",
+    // Ruff — fast linter & formatter (replaces flake8, black, isort)
+    "charliermarsh.ruff",
+    // Jinja2 template syntax highlighting
+    "samuelcolvin.jinjahtml",
+    // Better TOML editing (pyproject.toml)
+    "tamasfe.even-better-toml",
+    // GitLens — inline blame, history
+    "eamodio.gitlens"
+  ]
+}

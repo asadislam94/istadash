@@ -1,0 +1,214 @@
+from __future__ import annotations
+
+import json
+from typing import Any
+
+import requests
+from bs4 import BeautifulSoup
+
+from istadash.config import Settings
+
+
+class IstaError(RuntimeError):
+    pass
+
+
+class AuthenticationError(IstaError):
+    pass
+
+
+class ConfigurationError(IstaError):
+    pass
+
+
+class AuthorizationExpiredError(AuthenticationError):
+    pass
+
+
+class IstaClient:
+    SESSION_COOKIE_NAME = "my-ista-portal-session"
+
+    def __init__(self, settings: Settings, *, session_cookie: str | None = None):
+        self.settings = settings
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "Accept": "*/*",
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "Origin": settings.base_url,
+                "Referer": f"{settings.base_url}/auth/login",
+                "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36",
+                "X-Requested-With": "XMLHttpRequest",
+            }
+        )
+        self.session.cookies.set("locale", "en")
+        self.session.cookies.set("cookie_pref_necessary", "1")
+        self.session.cookies.set("cookie_pref_functionality", "1")
+        self.session.cookies.set("cookie_pref_analytical", "1")
+
+        if session_cookie:
+            self.session.cookies.set(self.SESSION_COOKIE_NAME, session_cookie, domain="myista.co.uk")
+
+    def login_with_credentials(self, *, username: str, password: str, scope: str | None = None) -> bool:
+        response = self.session.get(
+            f"{self.settings.base_url}/auth/login",
+            timeout=self.settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+
+        self._discover_hidden_inputs(response.text)
+
+        payload: dict[str, Any] = {"username": username, "password": password}
+        if scope:
+            payload["scope"] = scope
+
+        if not self._post_login_token(payload):
+            raise AuthenticationError("ista login was rejected")
+        return True
+
+    def has_active_session(self) -> bool:
+        try:
+            self.get_properties()
+        except AuthorizationExpiredError:
+            return False
+        return True
+
+    def get_session_cookie(self) -> str | None:
+        cookie = self.session.cookies.get(self.SESSION_COOKIE_NAME)
+        return None if not cookie else cookie
+
+    def get_properties(self) -> list[dict[str, Any]]:
+        payload = self._request_json("GET", "/tenantapi/customer/properties")
+        data = payload.get("Data")
+        if not isinstance(data, list):
+            raise IstaError("unexpected properties payload from ista")
+        return data
+
+    def get_meters(self) -> list[dict[str, Any]]:
+        payload = self._request_json("POST", "/tenantapi/meter/info")
+        data = payload.get("Data")
+        if not isinstance(data, list):
+            raise IstaError("unexpected meter info payload from ista")
+        return data
+
+    def fetch_meter_reads(self, meter_id: int) -> list[dict[str, Any]]:
+        page = 1
+        total = None
+        all_reads: list[dict[str, Any]] = []
+
+        while True:
+            payload = self._request_json(
+                "POST",
+                "/tenantapi/meter/reads",
+                data={
+                    "meterId": meter_id,
+                    "itemsPerPage": self.settings.items_per_page,
+                    "page": page,
+                    "billable": str(self.settings.billable_only).lower(),
+                },
+            )
+            data = payload.get("Data") or {}
+            page_reads = data.get("Data")
+            if not isinstance(page_reads, list):
+                raise IstaError("unexpected meter reads payload from ista")
+
+            all_reads.extend(page_reads)
+
+            if total is None:
+                total = int(data.get("Total", len(page_reads)))
+
+            if len(all_reads) >= total or len(page_reads) < self.settings.items_per_page:
+                break
+
+            page += 1
+
+        return all_reads
+
+    def select_meter(self, meters: list[dict[str, Any]]) -> dict[str, Any]:
+        active_meters = [meter for meter in meters if meter.get("MeterStatus") == "Active"]
+        if not active_meters:
+            raise ConfigurationError("no active meters returned by ista")
+
+        if self.settings.meter_id is not None:
+            for meter in active_meters:
+                if int(meter["MeterID"]) == self.settings.meter_id:
+                    return meter
+            raise ConfigurationError(
+                f"configured meter_id={self.settings.meter_id} was not found in active meters"
+            )
+
+        if len(active_meters) == 1:
+            return active_meters[0]
+
+        heat_meters = [
+            meter for meter in active_meters if "heat" in str(meter.get("TypeDescription", "")).lower()
+        ]
+        if len(heat_meters) == 1:
+            return heat_meters[0]
+
+        available = ", ".join(
+            f"{meter.get('MeterID')}:{meter.get('TypeDescription')}" for meter in active_meters
+        )
+        raise ConfigurationError(
+            "multiple active meters found; set ISTA_METER_ID explicitly. Available meters: "
+            f"{available}"
+        )
+
+    def _discover_hidden_inputs(self, html: str) -> dict[str, str]:
+        soup = BeautifulSoup(html, "html.parser")
+        form = soup.find("form", {"id": "account_login"})
+        hidden_inputs: dict[str, str] = {}
+        if form is None:
+            return hidden_inputs
+        for field in form.find_all("input", {"type": "hidden"}):
+            name = field.attrs.get("name")
+            if name:
+                hidden_inputs[name] = field.attrs.get("value", "")
+        return hidden_inputs
+
+    def _post_login_token(self, payload: dict[str, Any]) -> bool:
+        response = self.session.post(
+            f"{self.settings.base_url}/auth/loginToken",
+            data=payload,
+            timeout=self.settings.request_timeout_seconds,
+        )
+        response.raise_for_status()
+
+        text = response.text.strip().lower()
+        if text == "true":
+            return True
+        if text == "false":
+            return False
+
+        try:
+            parsed = response.json()
+        except ValueError:
+            return False
+
+        if isinstance(parsed, bool):
+            return parsed
+        return bool(parsed)
+
+    def _request_json(self, method: str, path: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        response = self.session.request(
+            method,
+            f"{self.settings.base_url}{path}",
+            data=data,
+            timeout=self.settings.request_timeout_seconds,
+        )
+        if response.status_code in (401, 403):
+            raise AuthorizationExpiredError("ista authorization expired")
+        response.raise_for_status()
+        try:
+            payload = response.json()
+        except ValueError as exc:
+            preview = response.text[:250].strip().replace("\n", " ")
+            raise IstaError(f"non-JSON response from {path}: {preview}") from exc
+
+        status_code = payload.get("StatusCode")
+        if status_code in (401, 403):
+            raise AuthorizationExpiredError("ista authorization expired")
+        if status_code not in (None, 200):
+            message = payload.get("Message") or payload.get("Error") or json.dumps(payload)[:250]
+            raise IstaError(f"ista request to {path} failed with status {status_code}: {message}")
+        return payload

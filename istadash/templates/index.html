@@ -1,0 +1,541 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IstaDash</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
+</head>
+<body>
+    <main class="shell">
+        <section class="hero panel">
+            <div>
+                <p class="eyebrow">Local ista meter dashboard</p>
+                <h1>IstaDash</h1>
+                <p class="lede">View your locally stored heat meter readings, export them to CSV, and refresh from the ista portal only when you want to.</p>
+            </div>
+            <div class="hero-side">
+                <div class="actions">
+                    <form action="{{ url_for('refresh') }}" method="post">
+                        <button class="button primary" type="submit">Refresh from ista</button>
+                    </form>
+                    <details class="export-menu">
+                        <summary class="button secondary">Export</summary>
+                        <div class="export-options">
+                            <a href="{{ url_for('export_csv') }}">CSV</a>
+                            <a href="{{ url_for('export_json') }}">JSON</a>
+                        </div>
+                    </details>
+                </div>
+                <div class="header-stats" aria-label="Usage summary">
+                    <article class="header-stat">
+                        <p>Total readings</p>
+                        <strong>{{ summary['reading_count'] or 0 }}</strong>
+                    </article>
+                    <article class="header-stat">
+                        <p>Tracked meters</p>
+                        <strong>{{ summary['meter_count'] or 0 }}</strong>
+                    </article>
+                    <article class="header-stat">
+                        <p>Latest daily usage</p>
+                        <strong>
+                            {% if summary['latest_usage_value'] is not none %}
+                                {{ summary['latest_usage_value'] }} {{ summary['usage_unit'] or '' }}
+                            {% else %}
+                                No data yet
+                            {% endif %}
+                        </strong>
+                    </article>
+                    <article class="header-stat">
+                        <p>Latest cumulative reading</p>
+                        <strong>{{ summary['latest_read_value'] or 'No data yet' }}</strong>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <section class="messages">
+                    {% for category, message in messages %}
+                        <article class="message {{ category }}">{{ message }}</article>
+                    {% endfor %}
+                </section>
+            {% endif %}
+        {% endwith %}
+
+        <section class="panel controls-panel">
+            <div class="panel-header controls-header">
+                <div>
+                    <p class="eyebrow">Time range</p>
+                    <h2>Filter usage window</h2>
+                </div>
+                <p class="lede">Default view is 7 days. Use quick ranges or set start and end dates manually.</p>
+            </div>
+            <div class="range-toolbar">
+                <div class="range-buttons" role="group" aria-label="Quick date ranges">
+                    <button class="range-button" type="button" data-range="all">All</button>
+                    <button class="range-button" type="button" data-range="7d">7d</button>
+                    <button class="range-button" type="button" data-range="3w">3w</button>
+                    <button class="range-button" type="button" data-range="1m">1m</button>
+                    <button class="range-button" type="button" data-range="6m">6m</button>
+                </div>
+                <label class="tick-level">
+                    <span>Tick level</span>
+                    <select id="tickLevelSelect" aria-label="Tick level">
+                        <option value="d" selected>d</option>
+                        <option value="w">w</option>
+                        <option value="m">m</option>
+                    </select>
+                </label>
+                <form class="manual-dates" id="manualDateForm">
+                    <label>
+                        <span>Start</span>
+                        <input type="date" id="startDateInput" name="start_date">
+                    </label>
+                    <label>
+                        <span>End</span>
+                        <input type="date" id="endDateInput" name="end_date">
+                    </label>
+                    <button class="button secondary" type="submit">Apply dates</button>
+                </form>
+            </div>
+            <p class="active-range" id="activeRangeLabel"></p>
+        </section>
+
+        <section class="panel tabs-panel">
+            <div class="tab-buttons" role="tablist" aria-label="Usage data views">
+                <button class="tab-button active" type="button" role="tab" data-tab="graph">Usage graph</button>
+                <button class="tab-button" type="button" role="tab" data-tab="table">Readings table</button>
+            </div>
+
+            <article class="tab-content active" data-tab-content="graph">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">Usage trend</p>
+                        <h2 id="chartHeading">Daily heat usage</h2>
+                    </div>
+                </div>
+                <div id="readsChart" aria-label="Daily heat usage chart"></div>
+            </article>
+
+            <article class="tab-content" data-tab-content="table">
+                <div class="panel-header">
+                    <div>
+                        <p class="eyebrow">History</p>
+                        <h2>Daily usage table</h2>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Date</th>
+                                <th>Meter</th>
+                                <th>Register</th>
+                                <th>Daily usage</th>
+                                <th>Unit</th>
+                                <th>Cumulative</th>
+                                <th>Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usageTableBody">
+                            <tr>
+                                <td colspan="7" class="empty-state">Loading…</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="table-pager" id="tablePager" hidden></div>
+            </article>
+        </section>
+
+        <section class="panel history-panel">
+            <div class="panel-header">
+                <div>
+                    <p class="eyebrow">Sync history</p>
+                    <h2>Recent refresh runs</h2>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Run</th>
+                            <th>Status</th>
+                            <th>Started</th>
+                            <th>Finished</th>
+                            <th>Fetched</th>
+                            <th>Inserted</th>
+                            <th>Message</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for run in sync_runs %}
+                            <tr>
+                                <td>#{{ run['id'] }}</td>
+                                <td>{{ run['status'] }}</td>
+                                <td>{{ run['started_at'] }}</td>
+                                <td>{{ run['finished_at'] or '-' }}</td>
+                                <td>{{ run['fetched_count'] }}</td>
+                                <td>{{ run['inserted_count'] }}</td>
+                                <td>{{ run['message'] or '-' }}</td>
+                            </tr>
+                        {% else %}
+                            <tr>
+                                <td colspan="7" class="empty-state">No refresh history yet.</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        const usageRows = {{ daily_usage_rows | tojson }};
+        const chartSeries = {{ chart_series | tojson }};
+        const chartUnit = {{ chart_unit | tojson }};
+
+        function parseIsoDate(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return null;
+            }
+            return date;
+        }
+
+        function toDateOnly(dateObj) {
+            const year = dateObj.getUTCFullYear();
+            const month = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+            const day = String(dateObj.getUTCDate()).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+        }
+
+        function subtractDays(dateObj, days) {
+            const copy = new Date(dateObj.getTime());
+            copy.setUTCDate(copy.getUTCDate() - days);
+            return copy;
+        }
+
+        function getWeekStart(dateObj) {
+            const day = dateObj.getUTCDay() || 7;
+            return subtractDays(dateObj, day - 1);
+        }
+
+        function getIsoWeek(dateObj) {
+            const temp = new Date(Date.UTC(dateObj.getUTCFullYear(), dateObj.getUTCMonth(), dateObj.getUTCDate()));
+            const dayNum = temp.getUTCDay() || 7;
+            temp.setUTCDate(temp.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(temp.getUTCFullYear(), 0, 1));
+            const weekNum = Math.ceil((((temp - yearStart) / 86400000) + 1) / 7);
+            return { year: temp.getUTCFullYear(), week: weekNum };
+        }
+
+        function bucketKeyFor(pointDate, level) {
+            if (level === 'm') {
+                return toDateOnly(new Date(Date.UTC(pointDate.getUTCFullYear(), pointDate.getUTCMonth(), 1)));
+            }
+            if (level === 'w') {
+                return toDateOnly(getWeekStart(pointDate));
+            }
+            return toDateOnly(pointDate);
+        }
+
+        function labelForBucket(bucketDate, level) {
+            if (level === 'm') {
+                return bucketDate.slice(0, 7);
+            }
+            if (level === 'w') {
+                const isoDate = parseIsoDate(`${bucketDate}T00:00:00Z`);
+                const isoWeek = getIsoWeek(isoDate);
+                return `${isoWeek.year}-W${String(isoWeek.week).padStart(2, '0')}`;
+            }
+            return bucketDate;
+        }
+
+        function aggregateSeries(points, level) {
+            if (level === 'd') {
+                return points.map((point) => ({
+                    label: point.read_day,
+                    usage: Number(point.usage_value || 0),
+                }));
+            }
+
+            const buckets = new Map();
+            points.forEach((point) => {
+                const dateObj = parseIsoDate(`${point.read_day}T00:00:00Z`);
+                if (!dateObj) {
+                    return;
+                }
+                const key = bucketKeyFor(dateObj, level);
+                buckets.set(key, (buckets.get(key) || 0) + Number(point.usage_value || 0));
+            });
+
+            return Array.from(buckets.entries())
+                .sort((a, b) => a[0].localeCompare(b[0]))
+                .map(([bucket, usage]) => ({
+                    label: labelForBucket(bucket, level),
+                    usage: Number(usage.toFixed(3)),
+                }));
+        }
+
+        const latestDate = chartSeries.length > 0
+            ? parseIsoDate(`${chartSeries[chartSeries.length - 1].read_day}T00:00:00Z`)
+            : null;
+
+        const rangeToDays = {
+            '7d': 7,
+            '3w': 21,
+            '1m': 30,
+            '6m': 183,
+        };
+
+        const TABLE_PAGE_SIZE = 11;
+        let currentPage = 1;
+
+        const tableBody = document.getElementById('usageTableBody');
+        const tablePager = document.getElementById('tablePager');
+        const activeRangeLabel = document.getElementById('activeRangeLabel');
+        const startDateInput = document.getElementById('startDateInput');
+        const endDateInput = document.getElementById('endDateInput');
+        const tickLevelSelect = document.getElementById('tickLevelSelect');
+        const rangeButtons = Array.from(document.querySelectorAll('.range-button'));
+        const tabButtons = Array.from(document.querySelectorAll('.tab-button'));
+        const tabContents = Array.from(document.querySelectorAll('.tab-content'));
+        const exportMenu = document.querySelector('.export-menu');
+        const exportCsvLink = document.getElementById('exportCsvLink');
+        const exportJsonLink = document.getElementById('exportJsonLink');
+
+        let activeStart = null;
+        let activeEnd = null;
+        let activeTickLevel = 'd';
+        let plotlyInitialized = false;
+
+        function setActiveTab(tabName) {
+            tabButtons.forEach((button) => {
+                button.classList.toggle('active', button.dataset.tab === tabName);
+            });
+            tabContents.forEach((content) => {
+                content.classList.toggle('active', content.dataset.tabContent === tabName);
+            });
+        }
+
+        tabButtons.forEach((button) => {
+            button.addEventListener('click', () => setActiveTab(button.dataset.tab));
+        });
+
+        function inActiveRange(isoDate) {
+            if (!isoDate) {
+                return false;
+            }
+            const rowDate = parseIsoDate(`${isoDate}T00:00:00Z`);
+            if (!rowDate) {
+                return false;
+            }
+            const startOk = !activeStart || rowDate >= activeStart;
+            const endOk = !activeEnd || rowDate <= activeEnd;
+            return startOk && endOk;
+        }
+
+        function updateActiveLabel() {
+            if (!activeStart || !activeEnd) {
+                activeRangeLabel.textContent = 'Showing all available usage data';
+                return;
+            }
+            activeRangeLabel.textContent = `Showing ${toDateOnly(activeStart)} to ${toDateOnly(activeEnd)}`;
+        }
+
+        function renderTable() {
+            const filteredRows = usageRows.filter((row) => inActiveRange(row.read_at.slice(0, 10)));
+            if (filteredRows.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="empty-state">No usage data in the selected range.</td></tr>';
+                tablePager.hidden = true;
+                return;
+            }
+
+            const totalPages = Math.ceil(filteredRows.length / TABLE_PAGE_SIZE);
+            if (currentPage > totalPages) currentPage = totalPages;
+            const start = (currentPage - 1) * TABLE_PAGE_SIZE;
+            const pageRows = filteredRows.slice(start, start + TABLE_PAGE_SIZE);
+
+            tableBody.innerHTML = pageRows.map((row) => `
+                <tr>
+                    <td>${row.read_at}</td>
+                    <td>${row.meter_no || row.meter_id}</td>
+                    <td>${row.register_name || '-'}</td>
+                    <td>${row.usage_value}</td>
+                    <td>${row.unit_of_measure || '-'}</td>
+                    <td>${row.read_value_text}</td>
+                    <td>${row.read_type}</td>
+                </tr>
+            `).join('');
+
+            tablePager.hidden = totalPages <= 1;
+            tablePager.innerHTML = `
+                <button class="pager-btn" ${currentPage === 1 ? 'disabled' : ''} data-dir="-1">&lsaquo; Prev</button>
+                <span class="pager-info">Page ${currentPage} of ${totalPages} &nbsp;&middot;&nbsp; ${filteredRows.length} rows</span>
+                <button class="pager-btn" ${currentPage === totalPages ? 'disabled' : ''} data-dir="1">Next &rsaquo;</button>
+            `;
+        }
+
+        document.addEventListener('click', (event) => {
+            const btn = event.target.closest('.pager-btn');
+            if (btn && !btn.disabled) {
+                currentPage += parseInt(btn.dataset.dir, 10);
+                renderTable();
+            }
+        });
+
+        function renderChart() {
+            const chartDiv = document.getElementById('readsChart');
+            if (!chartDiv) {
+                return;
+            }
+            const filteredSeries = chartSeries.filter((point) => inActiveRange(point.read_day));
+            const aggregated = aggregateSeries(filteredSeries, activeTickLevel);
+            const traces = [{
+                x: aggregated.map((p) => p.label),
+                y: aggregated.map((p) => p.usage),
+                type: 'scatter',
+                mode: 'lines+markers',
+                fill: 'tozeroy',
+                fillcolor: 'rgba(255, 140, 66, 0.12)',
+                line: { color: '#ff8c42', width: 2 },
+                marker: { color: '#ff8c42', size: 4 },
+                name: `Usage (${chartUnit})`,
+                hovertemplate: '<b>%{x}</b><br>Usage: %{y} ' + chartUnit + '<extra></extra>',
+            }];
+            const layout = {
+                paper_bgcolor: 'transparent',
+                plot_bgcolor: 'rgba(255, 250, 242, 0.5)',
+                font: { family: '"IBM Plex Sans", sans-serif', color: '#4c5646', size: 12 },
+                height: 420,
+                margin: { l: 58, r: 20, t: 16, b: 90 },
+                xaxis: {
+                    tickangle: -45,
+                    gridcolor: 'rgba(76, 86, 70, 0.1)',
+                    linecolor: 'rgba(76, 86, 70, 0.2)',
+                    zeroline: false,
+                    automargin: true,
+                },
+                yaxis: {
+                    title: { text: chartUnit, standoff: 8 },
+                    gridcolor: 'rgba(76, 86, 70, 0.1)',
+                    linecolor: 'rgba(76, 86, 70, 0.2)',
+                    zeroline: false,
+                    rangemode: 'tozero',
+                },
+                showlegend: false,
+                hovermode: 'x unified',
+            };
+            const config = {
+                responsive: true,
+                displaylogo: false,
+                modeBarButtonsToRemove: ['select2d', 'lasso2d'],
+            };
+            if (!plotlyInitialized) {
+                Plotly.newPlot(chartDiv, traces, layout, config);
+                plotlyInitialized = true;
+            } else {
+                Plotly.react(chartDiv, traces, layout, config);
+            }
+        }
+
+        function updateExportLinks() {
+            const params = new URLSearchParams();
+            if (activeStart) params.set('start_date', toDateOnly(activeStart));
+            if (activeEnd) params.set('end_date', toDateOnly(activeEnd));
+            const query = params.toString();
+            const suffix = query ? '?' + query : '';
+            if (exportCsvLink) exportCsvLink.href = '/export.csv' + suffix;
+            if (exportJsonLink) exportJsonLink.href = '/export.json' + suffix;
+        }
+
+        function applyRange(startDate, endDate, selectedButton) {
+            activeStart = startDate;
+            activeEnd = endDate;
+            currentPage = 1;
+
+            startDateInput.value = activeStart ? toDateOnly(activeStart) : '';
+            endDateInput.value = activeEnd ? toDateOnly(activeEnd) : '';
+
+            rangeButtons.forEach((button) => {
+                button.classList.toggle('active', selectedButton && button === selectedButton);
+            });
+
+            updateActiveLabel();
+            updateExportLinks();
+            renderChart();
+            renderTable();
+        }
+
+        rangeButtons.forEach((button) => {
+            button.addEventListener('click', () => {
+                const rangeKey = button.dataset.range;
+                if (rangeKey === 'all') {
+                    applyRange(null, null, button);
+                    return;
+                }
+                const days = rangeToDays[rangeKey];
+                if (!latestDate || !days) {
+                    return;
+                }
+                const endDate = new Date(latestDate.getTime());
+                const startDate = subtractDays(endDate, days - 1);
+                applyRange(startDate, endDate, button);
+            });
+        });
+
+        document.getElementById('manualDateForm').addEventListener('submit', (event) => {
+            event.preventDefault();
+            const startDate = startDateInput.value ? parseIsoDate(`${startDateInput.value}T00:00:00Z`) : null;
+            const endDate = endDateInput.value ? parseIsoDate(`${endDateInput.value}T00:00:00Z`) : null;
+            if (!startDate || !endDate || startDate > endDate) {
+                return;
+            }
+            applyRange(startDate, endDate, null);
+        });
+
+        const chartHeading = document.getElementById('chartHeading');
+        const tickLevelLabels = { d: 'Daily', w: 'Weekly', m: 'Monthly' };
+
+        function updateChartHeading() {
+            if (chartHeading) {
+                chartHeading.textContent = `${tickLevelLabels[activeTickLevel] || 'Daily'} heat usage`;
+            }
+        }
+
+        tickLevelSelect.addEventListener('change', (event) => {
+            activeTickLevel = event.target.value;
+            updateChartHeading();
+            renderChart();
+        });
+
+        document.addEventListener('click', (event) => {
+            if (exportMenu && exportMenu.hasAttribute('open') && !exportMenu.contains(event.target)) {
+                exportMenu.removeAttribute('open');
+            }
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && exportMenu && exportMenu.hasAttribute('open')) {
+                exportMenu.removeAttribute('open');
+            }
+        });
+
+        if (latestDate) {
+            const defaultButton = document.querySelector('.range-button[data-range="7d"]');
+            const startDate = subtractDays(latestDate, 6);
+            applyRange(startDate, latestDate, defaultButton);
+        } else {
+            updateActiveLabel();
+            updateExportLinks();
+        }
+    </script>
+</body>
+</html>

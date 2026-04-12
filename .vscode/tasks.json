@@ -1,0 +1,79 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    // ── Tests & Lint ─────────────────────────────────────────────────────
+    {
+      "label": "Test",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/python -m pytest --tb=short -v",
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/ruff check istadash tests",
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Lint: fix",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/ruff check istadash tests --fix",
+      "group": "test",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    // ── Briefcase build tasks ─────────────────────────────────────────────
+    {
+      "label": "Briefcase: dev (current platform)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/briefcase dev",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Briefcase: create (Linux)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/briefcase create linux",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Briefcase: build (Linux)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/briefcase build linux",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": [],
+      "dependsOn": "Briefcase: create (Linux)"
+    },
+    {
+      "label": "Briefcase: package (Linux)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/briefcase package linux",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": [],
+      "dependsOn": "Briefcase: build (Linux)"
+    },
+    {
+      "label": "Briefcase: update (Linux)",
+      "type": "shell",
+      "command": "${workspaceFolder}/.venv/bin/briefcase update linux",
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}

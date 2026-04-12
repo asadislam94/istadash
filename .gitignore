@@ -1,0 +1,31 @@
+# Environment
+.env
+.env.*
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Packaging / distribution
+*.egg-info/
+dist/
+
+# Briefcase build artefacts
+build/
+logs/
+linux/
+macOS/
+windows/
+
+# Test / lint caches
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db

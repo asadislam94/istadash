@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IstaDash Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <main class="shell">
+        <section class="panel login-panel">
+            <p class="eyebrow">Secure sign in</p>
+            <h1>IstaDash Setup</h1>
+            <p class="lede">Sign in once, select your property and meter, and IstaDash stores only your session token in your OS credential vault.</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    <section class="messages">
+                        {% for category, message in messages %}
+                            <article class="message {{ category }}">{{ message }}</article>
+                        {% endfor %}
+                    </section>
+                {% endif %}
+            {% endwith %}
+
+            {% if stage == 'credentials' %}
+                <form method="post" action="{{ url_for('login_start') }}" class="login-form">
+                    <label>
+                        <span>Email</span>
+                        <input type="email" name="username" required autocomplete="username">
+                    </label>
+                    <label>
+                        <span>Password</span>
+                        <input type="password" name="password" required autocomplete="current-password">
+                    </label>
+                    <button class="button primary" type="submit">Continue</button>
+                </form>
+            {% elif stage == 'property' %}
+                <form method="get" action="{{ url_for('login_select_meter') }}" class="login-form">
+                    <input type="hidden" name="login_id" value="{{ login_id }}">
+                    <label>
+                        <span>Select property</span>
+                        <select name="property_scope" required>
+                            {% for property in properties %}
+                                <option value="{{ property['CustId'] }}">{{ property.get('AddressLine1') or property['CustId'] }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button class="button primary" type="submit">Continue</button>
+                </form>
+            {% elif stage == 'meter' %}
+                <form method="get" action="{{ url_for('login_complete') }}" class="login-form">
+                    <input type="hidden" name="login_id" value="{{ login_id }}">
+                    <input type="hidden" name="property_scope" value="{{ selected_property_scope }}">
+                    <label>
+                        <span>Select meter</span>
+                        <select name="meter_id" required>
+                            {% for meter in meters %}
+                                <option value="{{ meter['MeterID'] }}">{{ meter['TypeDescription'] }} - {{ meter['MeterNo'] }}</option>
+                            {% endfor %}
+                        </select>
+                    </label>
+                    <button class="button primary" type="submit">Complete setup</button>
+                </form>
+            {% endif %}
+        </section>
+    </main>
+</body>
+</html>

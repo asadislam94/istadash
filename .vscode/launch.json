@@ -1,0 +1,48 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    // ── Dev: plain Flask (browser in OS default) ──────────────────────────
+    {
+      "name": "IstaDash: Flask (dev server)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "istadash.main",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        // Override the config so Flask runs in debug mode without editing the
+        // persisted config.json on disk.
+        "FLASK_DEBUG": "1"
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    // ── Dev: PyWebView desktop window ─────────────────────────────────────
+    {
+      "name": "IstaDash: Desktop window (PyWebView)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "istadash",
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "QT_QPA_PLATFORM": "xcb",
+        "WAYLAND_DISPLAY": ""
+      },
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    // ── Tests ─────────────────────────────────────────────────────────────
+    {
+      "name": "IstaDash: pytest",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["--tb=short", "-v"],
+      "python": "${workspaceFolder}/.venv/bin/python",
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}

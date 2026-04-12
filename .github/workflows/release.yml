@@ -1,0 +1,74 @@
+name: Release
+
+# Trigger on annotated version tags, e.g. v0.1.0
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────────────
+  # Build a native installer on each platform
+  # ─────────────────────────────────────────────────────────────────────────
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            platform: linux
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Briefcase
+        run: pip install briefcase
+
+      # briefcase create: set up the platform-specific app scaffold
+      # briefcase build: compile / collect everything into the app bundle
+      # briefcase package: produce the final installer (AppImage / MSI / DMG)
+      - name: Package app
+        run: |
+          briefcase create ${{ matrix.platform }}
+          briefcase build ${{ matrix.platform }}
+          briefcase package ${{ matrix.platform }}
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.platform }}
+          # Briefcase writes all output into dist/
+          path: dist/
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # Gather all three installers and create the GitHub Release
+  # ─────────────────────────────────────────────────────────────────────────
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # required to create/edit a release
+
+    steps:
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          generate_release_notes: true
