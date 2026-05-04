@@ -12,6 +12,10 @@
 </head>
 <body>
     <main class="shell">
+        <div class="update-banner" id="updateBanner" hidden role="status">
+            <span>&#x25B2; A new version <strong id="updateVersion"></strong> is available &mdash; you&rsquo;re on v{{ current_version }}.</span>
+            <button class="update-banner-link" id="updateLink" type="button">View release</button>
+        </div>
         <section class="hero panel">
             <div>
                 <p class="eyebrow">Local ista meter dashboard</p>
@@ -309,6 +313,26 @@
                     det.removeAttribute('open');
                 }
             });
+        });
+
+        // Check for updates after page load
+        window.addEventListener('load', () => {
+            fetch('{{ url_for("api_update_check") }}')
+                .then((r) => r.json())
+                .then(({ update }) => {
+                    if (!update) return;
+                    document.getElementById('updateVersion').textContent = 'v' + update.latest;
+                    const btn = document.getElementById('updateLink');
+                    btn.addEventListener('click', () => {
+                        if (window.pywebview && window.pywebview.api) {
+                            window.pywebview.api.open_url(update.url);
+                        } else {
+                            window.open(update.url, '_blank');
+                        }
+                    });
+                    document.getElementById('updateBanner').hidden = false;
+                })
+                .catch(() => {/* silently ignore */});
         });
 
     </script>
