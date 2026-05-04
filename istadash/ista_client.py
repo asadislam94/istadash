@@ -73,20 +73,6 @@ class IstaClient:
         log.info("login_with_credentials: succeeded (scope=%s)", scope)
         return True
 
-    def switch_scope(self, scope: str) -> bool:
-        """Switch the active property scope using the existing session cookie.
-
-        Posts only the scope parameter to /auth/loginToken — no credentials needed
-        when the session is already authenticated.  Returns True on success.
-        Raises AuthorizationExpiredError if the session has expired.
-        """
-        log.debug("switch_scope: switching to scope=%s", scope)
-        if not self._post_login_token({"scope": scope}):
-            log.warning("switch_scope: server rejected scope=%s", scope)
-            raise AuthorizationExpiredError("scope switch rejected — session may have expired")
-        log.info("switch_scope: succeeded for scope=%s", scope)
-        return True
-
     def has_active_session(self) -> bool:
         try:
             self.get_properties()

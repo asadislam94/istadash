@@ -242,7 +242,8 @@ def create_app() -> Flask:
 
         login_id = secrets.token_urlsafe(24)
         PENDING_LOGINS[login_id] = {
-            "cookie": session_cookie,
+            "username": username,
+            "password": password,
             "created_at": datetime.now(UTC),
         }
 
@@ -271,9 +272,13 @@ def create_app() -> Flask:
             flash("Please choose a property.", "error")
             return redirect(url_for("login_page"))
 
-        client = IstaClient(settings, session_cookie=pending["cookie"])
+        client = IstaClient(settings)
         try:
-            client.switch_scope(property_scope)
+            client.login_with_credentials(
+                username=pending["username"],
+                password=pending["password"],
+                scope=property_scope,
+            )
             meters = active_meters_only(client.get_meters())
         except Exception as exc:
             log.exception("login_select_meter: error loading meters")
@@ -319,13 +324,18 @@ def create_app() -> Flask:
 
         first_time_setup = not settings.is_onboarded()
 
-        # Re-use the already-authenticated cookie stored at login_start.
-        # Switch scope once more to ensure the stored cookie is scoped correctly.
-        client = IstaClient(settings, session_cookie=pending["cookie"])
+        # Re-authenticate with credentials + scope to obtain a properly scoped
+        # session cookie.  Credentials are held in-memory only (PENDING_LOGINS)
+        # and are never written to disk.
+        client = IstaClient(settings)
         try:
-            client.switch_scope(property_scope)
+            client.login_with_credentials(
+                username=pending["username"],
+                password=pending["password"],
+                scope=property_scope,
+            )
         except Exception as exc:
-            log.exception("login_complete: scope switch failed")
+            log.exception("login_complete: re-authentication failed")
             flash(f"Unable to complete login: {exc}", "error")
             return redirect(url_for("login_page"))
 
