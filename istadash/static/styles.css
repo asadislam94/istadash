@@ -57,6 +57,10 @@ body::before {
     color: var(--text);
 }
 
+.update-banner[hidden] {
+    display: none;
+}
+
 .update-banner-link {
     flex-shrink: 0;
     font-weight: 600;
