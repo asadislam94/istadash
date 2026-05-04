@@ -252,6 +252,23 @@ class IstaClient:
             log.error("_request_json %s %s — non-JSON response: %s", method, path, preview)
             raise IstaError(f"non-JSON response from {path}: {preview}") from exc
 
+        if payload is False:
+            log.warning(
+                "_request_json %s %s — API returned `false` (session likely expired)",
+                method, path,
+            )
+            raise AuthorizationExpiredError(
+                f"ista session expired — API returned false for {path}"
+            )
+        if not isinstance(payload, dict):
+            log.error(
+                "_request_json %s %s — unexpected JSON type %s: %r",
+                method, path, type(payload).__name__, str(payload)[:200],
+            )
+            raise IstaError(
+                f"unexpected JSON response type {type(payload).__name__} from {path}"
+            )
+
         status_code = payload.get("StatusCode")
         if status_code in (401, 403):
             log.warning(
