@@ -75,6 +75,7 @@ def check_for_update() -> dict | None:
     """Return dict(latest, url) if a newer release exists, else None."""
     now = datetime.now(UTC)
     if _update_cache["checked_at"] and now - _update_cache["checked_at"] < _UPDATE_CACHE_TTL:
+        log.debug("check_for_update: returning cached result (checked at %s)", _update_cache["checked_at"])
         return _update_cache["latest"]
 
     log.info("check_for_update: checking for new version (current: v%s)", _CURRENT_VERSION)
@@ -86,8 +87,10 @@ def check_for_update() -> dict | None:
         html_url = data.get("html_url", _RELEASE_PAGE)
         log.info("check_for_update: current=v%s latest=%s", _CURRENT_VERSION, tag)
         if _version_tuple(tag) > _version_tuple(_CURRENT_VERSION):
+            log.debug("check_for_update: update available! Latest version: %s", tag)
             result = {"latest": tag.lstrip("v"), "url": html_url}
         else:
+            log.debug("check_for_update: no update available")
             result = None
     except Exception as exc:
         log.warning("check_for_update: request failed — %s", exc)
