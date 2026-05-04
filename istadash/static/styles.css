@@ -769,6 +769,9 @@ thead th {
     line-height: 1.55;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.18) transparent;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .logs-output .log-debug  { color: #6a7a60; }
