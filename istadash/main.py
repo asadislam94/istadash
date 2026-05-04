@@ -177,10 +177,14 @@ def create_app() -> Flask:
             flash("No active properties were found for this account.", "error")
             return redirect(url_for("login_page"))
 
+        session_cookie = client.get_session_cookie()
+        if not session_cookie:
+            flash("Login succeeded but no session token was returned.", "error")
+            return redirect(url_for("login_page"))
+
         login_id = secrets.token_urlsafe(24)
         PENDING_LOGINS[login_id] = {
-            "username": username,
-            "password": password,
+            "cookie": session_cookie,
             "created_at": datetime.now(UTC),
         }
 
@@ -209,13 +213,9 @@ def create_app() -> Flask:
             flash("Please choose a property.", "error")
             return redirect(url_for("login_page"))
 
-        client = IstaClient(settings)
+        client = IstaClient(settings, session_cookie=pending["cookie"])
         try:
-            client.login_with_credentials(
-                username=pending["username"],
-                password=pending["password"],
-                scope=property_scope,
-            )
+            client.switch_scope(property_scope)
             meters = active_meters_only(client.get_meters())
         except Exception as exc:
             log.exception("login_select_meter: error loading meters")
@@ -261,15 +261,13 @@ def create_app() -> Flask:
 
         first_time_setup = not settings.is_onboarded()
 
-        client = IstaClient(settings)
+        # Re-use the already-authenticated cookie stored at login_start.
+        # Switch scope once more to ensure the stored cookie is scoped correctly.
+        client = IstaClient(settings, session_cookie=pending["cookie"])
         try:
-            client.login_with_credentials(
-                username=pending["username"],
-                password=pending["password"],
-                scope=property_scope,
-            )
+            client.switch_scope(property_scope)
         except Exception as exc:
-            log.exception("login_complete: error during credential re-auth")
+            log.exception("login_complete: scope switch failed")
             flash(f"Unable to complete login: {exc}", "error")
             return redirect(url_for("login_page"))
 
