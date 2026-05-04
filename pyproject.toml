@@ -83,3 +83,4 @@ requires = [
 [tool.briefcase.app.istadash.linux]
 
 [tool.briefcase.app.istadash.windows]
+upgrade_code = "{DB447C3B-BD6D-487B-A5A5-2E8FDDC70D46}"
