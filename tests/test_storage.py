@@ -79,6 +79,24 @@ class StorageTests(unittest.TestCase):
         self.assertEqual(summary["reading_count"], 2)
         self.assertAlmostEqual(summary["latest_usage_value"], 15.0)
 
+    def test_insert_readings_bulk(self) -> None:
+        """Batch-inserting many readings should insert each exactly once."""
+        readings = [
+            self._reading(
+                meter_id=i,
+                meter_no=f"M-{i}",
+                read_at=f"2026-01-{i:02d}T00:00:00+00:00",
+                read_value=float(i * 10),
+                read_value_text=str(i * 10),
+            )
+            for i in range(1, 101)
+        ]
+        count = self.storage.insert_readings(readings)
+        self.assertEqual(count, 100)
+        # Re-inserting the same batch must not insert any new rows
+        second_count = self.storage.insert_readings(readings)
+        self.assertEqual(second_count, 0)
+
     def test_get_chart_points(self) -> None:
         self.storage.insert_readings([
             self._reading(read_at="2026-01-01T00:00:00+00:00", read_value=100.0, read_value_text="100"),

@@ -46,6 +46,28 @@ class MainRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertIn(b"/login", response.data)
 
+    def test_api_sync_status_idle(self) -> None:
+        response = self.client.get("/api/sync-status")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertIsNotNone(data)
+        self.assertEqual(data.get("status"), "idle")
+
+    def test_parse_date_valid(self) -> None:
+        from istadash.main import _parse_date
+
+        self.assertEqual(_parse_date("2026-01-15"), "2026-01-15")
+        self.assertIsNone(_parse_date(None))
+        self.assertIsNone(_parse_date(""))
+
+    def test_parse_date_rejects_invalid(self) -> None:
+        from istadash.main import _parse_date
+
+        self.assertIsNone(_parse_date("15-01-2026"))
+        self.assertIsNone(_parse_date("2026/01/15"))
+        self.assertIsNone(_parse_date("not-a-date"))
+        self.assertIsNone(_parse_date("'; DROP TABLE readings; --"))
+
 
 class DesktopEntryPointTests(unittest.TestCase):
     """Ensure the PyWebView entry point can be imported and is runnable."""
