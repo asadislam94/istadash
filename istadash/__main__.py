@@ -11,7 +11,7 @@ import webbrowser
 class BrowserAPI:
     """Exposed to JS via window.pywebview.api — lets the page open URLs in the real browser."""
 
-    def open_url(self, url: str) -> None:  # noqa: PLR6301
+    def open_url(self, url: str) -> None:
         if isinstance(url, str) and url.startswith(("http://", "https://")):
             webbrowser.open(url)
 

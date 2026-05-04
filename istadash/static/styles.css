@@ -412,15 +412,8 @@ h2 {
     flex-wrap: wrap;
 }
 
-.chart-mode-buttons {
-    display: flex;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-}
-
 .range-button,
-.tab-button,
-.mode-button {
+.tab-button {
     border-radius: 999px;
     border: 1px solid rgba(36, 49, 38, 0.16);
     background: rgba(255, 255, 255, 0.72);
@@ -433,15 +426,13 @@ h2 {
 }
 
 .range-button:hover,
-.tab-button:hover,
-.mode-button:hover {
+.tab-button:hover {
     border-color: rgba(36, 49, 38, 0.32);
     background: rgba(255, 255, 255, 0.92);
 }
 
 .range-button.active,
-.tab-button.active,
-.mode-button.active {
+.tab-button.active {
     background: var(--text);
     color: #fff;
     border-color: var(--text);
@@ -510,45 +501,6 @@ h2 {
     font-size: 0.85em;
 }
 
-
-
-.stat-card {
-    padding: 1.35rem;
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card p,
-.config-list dt {
-    margin: 0;
-    color: var(--muted);
-}
-
-.stat-card strong {
-    display: block;
-    margin-top: 0.4rem;
-    font-size: clamp(1.4rem, 4vw, 2.4rem);
-}
-
-.accent-a::after,
-.accent-b::after,
-.accent-c::after,
-.accent-d::after {
-    content: "";
-    position: absolute;
-    width: 7rem;
-    height: 7rem;
-    border-radius: 50%;
-    top: -2rem;
-    right: -2rem;
-    opacity: 0.18;
-}
-
-.accent-a::after { background: var(--accent-1); }
-.accent-b::after { background: var(--accent-2); }
-.accent-c::after { background: var(--accent-3); }
-.accent-d::after { background: var(--accent-4); }
-
 .panel-header {
     display: flex;
     justify-content: space-between;
@@ -557,26 +509,12 @@ h2 {
     margin-bottom: 1rem;
 }
 
-.chart-panel,
-.filter-panel,
-.table-panel,
 .history-panel {
     padding: 1.3rem;
 }
 
 #readsChart {
     width: 100%;
-}
-
-.filters {
-    display: grid;
-    gap: 0.9rem;
-}
-
-.filters label,
-.config-list div {
-    display: grid;
-    gap: 0.35rem;
 }
 
 input {
@@ -587,17 +525,6 @@ input {
     padding: 0.8rem 0.9rem;
     font: inherit;
     color: var(--text);
-}
-
-.config-list {
-    display: grid;
-    gap: 0.8rem;
-    margin: 1.2rem 0 0;
-}
-
-.config-list dd {
-    margin: 0;
-    word-break: break-word;
 }
 
 .table-wrap {
@@ -667,13 +594,8 @@ thead th {
 }
 
 @media (max-width: 980px) {
-    .hero,
-    .dashboard-grid,
-    .summary-grid {
-        grid-template-columns: 1fr;
-    }
-
     .hero {
+        grid-template-columns: 1fr;
         align-items: start;
         flex-direction: column;
     }

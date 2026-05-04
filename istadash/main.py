@@ -9,7 +9,6 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import requests
-
 from flask import (
     Flask,
     Response,
@@ -29,7 +28,7 @@ from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
 # ---------------------------------------------------------------------------
-# File-based logging – persists across page reloads
+# File-based logging - persists across page reloads
 # ---------------------------------------------------------------------------
 LOG_FILE = Path.home() / ".local" / "share" / "istadash" / "istadash.log"
 
@@ -55,7 +54,7 @@ PENDING_TTL_MINUTES = 10
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Update check – cached for 2 minutes; also runs on every startup
+# Update check - cached for 2 minutes; also runs on every startup
 # ---------------------------------------------------------------------------
 _CURRENT_VERSION: str = importlib.metadata.version("istadash")
 _RELEASES_URL = "https://api.github.com/repos/asadislam94/istadash/releases/latest"
