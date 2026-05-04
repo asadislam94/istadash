@@ -29,7 +29,6 @@ from istadash.security import clear_session_cookie, load_session_cookie, save_se
 from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
-
 # ---------------------------------------------------------------------------
 # File-based logging - persists across page reloads
 # ---------------------------------------------------------------------------
