@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"></script>
 </head>
 <body>
@@ -25,9 +26,8 @@
             <div class="hero-side">
                 <div class="actions">
                     <div class="refresh-group">
-                        <form action="{{ url_for('refresh') }}" method="post">
-                            <button class="button primary" type="submit">Sync data</button>
-                        </form>
+                        <button class="button primary" type="button" id="syncBtn">Sync data</button>
+                        <span class="sync-status" id="syncStatus" hidden></span>
                         <details class="clear-menu">
                             <summary class="button primary icon-btn" title="More actions">▾</summary>
                             <div class="clear-options">
@@ -51,9 +51,9 @@
                         <p>Total readings</p>
                         <strong>{{ summary['reading_count'] or 0 }}</strong>
                     </article>
-                    <article class="header-stat">
-                        <p>Tracked meters</p>
-                        <strong>{{ summary['meter_count'] or 0 }}</strong>
+                    <article class="header-stat" id="statLastSynced">
+                        <p>Last synced</p>
+                        <strong id="lastSyncedVal">{{ last_synced_at or 'Never' }}</strong>
                     </article>
                     <article class="header-stat">
                         <p>Latest daily usage</p>
@@ -135,7 +135,13 @@
                         <h2 id="chartHeading">Daily heat usage</h2>
                     </div>
                 </div>
+                {% if summary['reading_count'] == 0 %}
+                <div class="empty-cta">
+                    <p>No readings yet &mdash; hit <strong>Sync data</strong> to pull your data from the ista portal.</p>
+                </div>
+                {% else %}
                 <div id="readsChart" aria-label="Daily heat usage chart"></div>
+                {% endif %}
             </article>
 
             <article class="tab-content" data-tab-content="table">
@@ -211,101 +217,9 @@
         </section>
     </main>
 
-    <!-- ── Live logs drawer ─────────────────────────────────────────────── -->
-    <aside id="logsDrawer" class="logs-drawer" aria-label="Live application logs" hidden>
-        <div class="logs-header">
-            <span class="logs-title">Live logs</span>
-            <div class="logs-controls">
-                <button class="logs-btn logs-btn-close" id="logsClose" type="button" aria-label="Close logs">✕</button>
-            </div>
-        </div>
-        <pre id="logsOutput" class="logs-output" aria-live="polite" aria-atomic="false"></pre>
-    </aside>
+    {% include '_logs_drawer.html' %}
 
     <script>
-        // ── Live logs ──────────────────────────────────────────────────────────
-        const logsToggle  = document.getElementById('logsToggle');
-        const logsDrawer  = document.getElementById('logsDrawer');
-        const logsOutput  = document.getElementById('logsOutput');
-        const logsClose   = document.getElementById('logsClose');
-
-        const LEVEL_CLASS = { DEBUG: 'log-debug', INFO: 'log-info', WARNING: 'log-warn', ERROR: 'log-error', CRITICAL: 'log-error' };
-        const LEVEL_RE    = /\b(DEBUG|INFO|WARNING|ERROR|CRITICAL)\b/;
-        const LOGS_URL    = '{{ url_for("logs_read") }}';
-
-        let pollTimer      = null;
-        let loadedCount    = 300;
-        let logsTotalLines = 0;
-
-        function renderLines(lines) {
-            logsOutput.textContent = '';
-            lines.forEach((text) => {
-                const span  = document.createElement('span');
-                const match = text.match(LEVEL_RE);
-                if (match) span.className = LEVEL_CLASS[match[1]] || '';
-                span.textContent = text + '\n';
-                logsOutput.appendChild(span);
-            });
-        }
-
-        function fetchLogs(scrollToBottom) {
-            fetch(LOGS_URL + '?n=' + loadedCount)
-                .then((r) => r.json())
-                .then((data) => {
-                    if (data.total === logsTotalLines &&
-                        data.lines.length === logsOutput.childElementCount) return;
-                    const atBottom = scrollToBottom ||
-                        (logsOutput.scrollHeight - logsOutput.scrollTop - logsOutput.clientHeight < 50);
-                    const prevTop    = logsOutput.scrollTop;
-                    const prevHeight = logsOutput.scrollHeight;
-                    logsTotalLines   = data.total;
-                    renderLines(data.lines);
-                    logsOutput.scrollTop = atBottom
-                        ? logsOutput.scrollHeight
-                        : prevTop + (logsOutput.scrollHeight - prevHeight);
-                })
-                .catch(() => {});
-        }
-
-        logsOutput.addEventListener('scroll', () => {
-            if (logsOutput.scrollTop > 0 || logsTotalLines <= loadedCount) return;
-            const prevHeight = logsOutput.scrollHeight;
-            loadedCount = Math.min(loadedCount + 300, 2000);
-            fetch(LOGS_URL + '?n=' + loadedCount)
-                .then((r) => r.json())
-                .then((data) => {
-                    logsTotalLines = data.total;
-                    renderLines(data.lines);
-                    logsOutput.scrollTop = logsOutput.scrollHeight - prevHeight;
-                })
-                .catch(() => {});
-        });
-
-        function startPolling() {
-            loadedCount    = 300;
-            logsTotalLines = 0;
-            fetchLogs(true);
-            pollTimer = setInterval(() => fetchLogs(false), 3000);
-        }
-
-        function stopPolling() {
-            clearInterval(pollTimer);
-            pollTimer = null;
-        }
-
-        logsToggle.addEventListener('click', () => {
-            const open = logsDrawer.hidden;
-            logsDrawer.hidden = !open;
-            logsToggle.setAttribute('aria-expanded', String(open));
-            if (open) startPolling(); else stopPolling();
-        });
-
-        logsClose.addEventListener('click', () => {
-            logsDrawer.hidden = true;
-            logsToggle.setAttribute('aria-expanded', 'false');
-            stopPolling();
-        });
-
         // Close <details> dropdowns when clicking outside them
         document.addEventListener('click', (e) => {
             document.querySelectorAll('details[open]').forEach((det) => {
@@ -512,7 +426,7 @@
                     <td>${row.usage_value}</td>
                     <td>${row.unit_of_measure || '-'}</td>
                     <td>${row.read_value_text}</td>
-                    <td>${row.read_type}</td>
+                    <td>${row.is_estimated ? '<em class="estimated-badge" title="Estimated reading">&sim;' + row.read_type + '</em>' : row.read_type}</td>
                 </tr>
             `).join('');
 
@@ -678,28 +592,72 @@
             updateExportLinks();
         }
 
-        // ── Refresh button: disable + spinner while the POST is in-flight ──────
-        const refreshForm = document.querySelector('form[action*="refresh"]');
-        if (refreshForm) {
-            refreshForm.addEventListener('submit', function () {
-                const btn = refreshForm.querySelector('button[type="submit"]');
-                if (!btn) return;
-                const spinner = document.createElement('span');
-                spinner.className = 'button-spinner';
-                btn.insertBefore(spinner, btn.firstChild);
-                btn.disabled = true;
-            });
-        }
+        // ── Async sync ─────────────────────────────────────────────────────────
+        (function () {
+            const syncBtn    = document.getElementById('syncBtn');
+            const syncStatus = document.getElementById('syncStatus');
+            let syncPoll     = null;
 
-        // Re-enable if the browser restores the page from bfcache (Back button).
-        window.addEventListener('pageshow', function (e) {
-            if (!e.persisted || !refreshForm) return;
-            const btn = refreshForm.querySelector('button[type="submit"]');
-            if (!btn) return;
-            btn.disabled = false;
-            const spinner = btn.querySelector('.button-spinner');
-            if (spinner) spinner.remove();
-        });
+            function setSyncStatus(text, isError) {
+                if (!syncStatus) return;
+                syncStatus.textContent = text;
+                syncStatus.hidden = !text;
+                syncStatus.classList.toggle('error', Boolean(isError));
+            }
+
+            function stopPoll() {
+                if (syncPoll) { clearInterval(syncPoll); syncPoll = null; }
+            }
+
+            function onSyncEnd() {
+                stopPoll();
+                if (!syncBtn) return;
+                syncBtn.disabled = false;
+                const s = syncBtn.querySelector('.button-spinner');
+                if (s) s.remove();
+            }
+
+            function pollStatus() {
+                fetch('{{ url_for("api_sync_status") }}')
+                    .then((r) => r.json())
+                    .then((data) => {
+                        if (data.status === 'running') {
+                            setSyncStatus('Syncing\u2026');
+                        } else if (data.status === 'done') {
+                            onSyncEnd();
+                            setSyncStatus('');
+                            window.location.reload();
+                        } else if (data.status === 'auth_expired') {
+                            onSyncEnd();
+                            window.location.href = '{{ url_for("login_page") }}';
+                        } else if (data.status === 'failed') {
+                            onSyncEnd();
+                            setSyncStatus(data.message || 'Sync failed', true);
+                        }
+                    })
+                    .catch(() => {});
+            }
+
+            if (syncBtn) {
+                syncBtn.addEventListener('click', () => {
+                    syncBtn.disabled = true;
+                    const spinner = document.createElement('span');
+                    spinner.className = 'button-spinner';
+                    syncBtn.insertBefore(spinner, syncBtn.firstChild);
+                    setSyncStatus('Starting\u2026');
+                    fetch('{{ url_for("refresh") }}', { method: 'POST' })
+                        .then((r) => {
+                            if (r.status === 202) {
+                                syncPoll = setInterval(pollStatus, 1500);
+                            } else {
+                                onSyncEnd();
+                                setSyncStatus('Failed to start sync', true);
+                            }
+                        })
+                        .catch(() => { onSyncEnd(); setSyncStatus('Network error', true); });
+                });
+            }
+        })();
 
         // ── Export links: brief spinner on the summary while download starts ───
         const exportSummary = document.querySelector('.export-menu summary');

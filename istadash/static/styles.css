@@ -205,11 +205,7 @@ h2 {
     gap: 2px;
 }
 
-.refresh-group > form {
-    display: contents;
-}
-
-.refresh-group > form > .button.primary {
+.refresh-group > #syncBtn {
     border-radius: 999px 0 0 999px;
 }
 
@@ -533,6 +529,8 @@ input {
 
 .table-wrap {
     overflow-x: auto;
+    max-height: 480px;
+    overflow-y: auto;
 }
 
 .table-pager {
@@ -589,12 +587,38 @@ thead th {
     color: var(--muted);
     font-size: 0.9rem;
     font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: var(--panel);
+    z-index: 1;
 }
 
 .empty-state {
     text-align: center;
     color: var(--muted);
     padding: 2rem 1rem;
+}
+
+.empty-cta {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--muted);
+}
+
+.sync-status {
+    font-size: 0.85rem;
+    color: var(--muted);
+    margin-left: 0.5rem;
+    align-self: center;
+}
+
+.sync-status.error {
+    color: var(--accent-3);
+}
+
+.estimated-badge {
+    font-style: normal;
+    opacity: 0.8;
 }
 
 @media (max-width: 980px) {
@@ -745,6 +769,9 @@ thead th {
     line-height: 1.55;
     scrollbar-width: thin;
     scrollbar-color: rgba(255,255,255,0.18) transparent;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
 }
 
 .logs-output .log-debug  { color: #6a7a60; }

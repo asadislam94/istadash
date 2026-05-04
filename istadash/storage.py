@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS sync_runs (
     inserted_count INTEGER NOT NULL DEFAULT 0,
     export_path TEXT
 );
+
+CREATE INDEX IF NOT EXISTS idx_readings_read_at ON readings(read_at);
+CREATE INDEX IF NOT EXISTS idx_readings_meter_date ON readings(meter_id, read_at);
 """
 
 
@@ -168,30 +171,31 @@ class Storage:
             for reading in readings
         ]
 
-        inserted = 0
+        if not rows:
+            return 0
         with self.connect() as connection:
-            for row in rows:
-                cursor = connection.execute(
-                    """
-                    INSERT OR IGNORE INTO readings (
-                        meter_id,
-                        meter_no,
-                        read_at,
-                        register_name,
-                        unit_of_measure,
-                        read_value,
-                        read_value_text,
-                        read_type,
-                        is_estimated,
-                        is_invoiced,
-                        source_payload,
-                        created_at
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    row,
+            before = connection.total_changes
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO readings (
+                    meter_id,
+                    meter_no,
+                    read_at,
+                    register_name,
+                    unit_of_measure,
+                    read_value,
+                    read_value_text,
+                    read_type,
+                    is_estimated,
+                    is_invoiced,
+                    source_payload,
+                    created_at
                 )
-                inserted += cursor.rowcount
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                rows,
+            )
+            inserted = connection.total_changes - before
         log.debug("insert_readings: %d new rows inserted out of %d", inserted, len(rows))
         return inserted
 
