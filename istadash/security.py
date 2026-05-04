@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import warnings
-from pathlib import Path
 
 import keyring
 import keyring.errors
+
+from istadash.config import CONFIG_DIR
 
 SERVICE_NAME = "istadash"
 TOKEN_KEY = "ista_session_cookie"
@@ -14,7 +15,7 @@ TOKEN_KEY = "ista_session_cookie"
 # Fallback token file used when no OS keyring backend is available (e.g.
 # headless Linux without a Secret Service daemon).  The file is mode 0600 and
 # lives in the same config directory as the rest of the app data.
-_FALLBACK_FILE = Path.home() / ".config" / "istadash" / ".session_token"
+_FALLBACK_FILE = CONFIG_DIR / ".session_token"
 
 log = logging.getLogger(__name__)
 
