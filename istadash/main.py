@@ -4,7 +4,9 @@ import importlib.metadata
 import json
 import logging
 import logging.handlers
+import os
 import secrets
+import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -27,10 +29,24 @@ from istadash.security import clear_session_cookie, load_session_cookie, save_se
 from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
+
 # ---------------------------------------------------------------------------
 # File-based logging - persists across page reloads
 # ---------------------------------------------------------------------------
-LOG_FILE = Path.home() / ".local" / "share" / "istadash" / "istadash.log"
+def _get_log_file() -> Path:
+    if sys.platform == "win32":
+        local_app_data = os.environ.get("LOCALAPPDATA")
+        if not local_app_data:
+            raise RuntimeError("%%LOCALAPPDATA%% is not set")
+        return Path(local_app_data) / "istadash" / "istadash.log"
+    if sys.platform.startswith("linux"):
+        return Path.home() / ".local" / "share" / "istadash" / "istadash.log"
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / "istadash" / "istadash.log"
+    raise RuntimeError(f"Unsupported platform: {sys.platform!r}")
+
+
+LOG_FILE = _get_log_file()
 
 
 def _setup_log_capture() -> None:
