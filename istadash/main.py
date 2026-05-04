@@ -202,6 +202,10 @@ def create_app() -> Flask:
     def active_meters_only(meters: list[dict]) -> list[dict]:
         return [meter for meter in meters if meter.get("MeterStatus") == "Active"]
 
+    @app.get("/favicon.ico")
+    def favicon():
+        return app.send_static_file("favicon.ico")
+
     @app.get("/login")
     def login_page():
         if require_onboarded_session():
