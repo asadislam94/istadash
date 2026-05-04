@@ -25,9 +25,8 @@
             <div class="hero-side">
                 <div class="actions">
                     <div class="refresh-group">
-                        <form action="{{ url_for('refresh') }}" method="post">
-                            <button class="button primary" type="submit">Sync data</button>
-                        </form>
+                        <button class="button primary" type="button" id="syncBtn">Sync data</button>
+                        <span class="sync-status" id="syncStatus" hidden></span>
                         <details class="clear-menu">
                             <summary class="button primary icon-btn" title="More actions">▾</summary>
                             <div class="clear-options">
@@ -51,9 +50,9 @@
                         <p>Total readings</p>
                         <strong>{{ summary['reading_count'] or 0 }}</strong>
                     </article>
-                    <article class="header-stat">
-                        <p>Tracked meters</p>
-                        <strong>{{ summary['meter_count'] or 0 }}</strong>
+                    <article class="header-stat" id="statLastSynced">
+                        <p>Last synced</p>
+                        <strong id="lastSyncedVal">{{ last_synced_at or 'Never' }}</strong>
                     </article>
                     <article class="header-stat">
                         <p>Latest daily usage</p>
@@ -135,7 +134,13 @@
                         <h2 id="chartHeading">Daily heat usage</h2>
                     </div>
                 </div>
+                {% if summary['reading_count'] == 0 %}
+                <div class="empty-cta">
+                    <p>No readings yet &mdash; hit <strong>Sync data</strong> to pull your data from the ista portal.</p>
+                </div>
+                {% else %}
                 <div id="readsChart" aria-label="Daily heat usage chart"></div>
+                {% endif %}
             </article>
 
             <article class="tab-content" data-tab-content="table">
@@ -420,7 +425,7 @@
                     <td>${row.usage_value}</td>
                     <td>${row.unit_of_measure || '-'}</td>
                     <td>${row.read_value_text}</td>
-                    <td>${row.read_type}</td>
+                    <td>${row.is_estimated ? '<em class="estimated-badge" title="Estimated reading">&sim;' + row.read_type + '</em>' : row.read_type}</td>
                 </tr>
             `).join('');
 
@@ -586,28 +591,72 @@
             updateExportLinks();
         }
 
-        // ── Refresh button: disable + spinner while the POST is in-flight ──────
-        const refreshForm = document.querySelector('form[action*="refresh"]');
-        if (refreshForm) {
-            refreshForm.addEventListener('submit', function () {
-                const btn = refreshForm.querySelector('button[type="submit"]');
-                if (!btn) return;
-                const spinner = document.createElement('span');
-                spinner.className = 'button-spinner';
-                btn.insertBefore(spinner, btn.firstChild);
-                btn.disabled = true;
-            });
-        }
+        // ── Async sync ─────────────────────────────────────────────────────────
+        (function () {
+            const syncBtn    = document.getElementById('syncBtn');
+            const syncStatus = document.getElementById('syncStatus');
+            let syncPoll     = null;
 
-        // Re-enable if the browser restores the page from bfcache (Back button).
-        window.addEventListener('pageshow', function (e) {
-            if (!e.persisted || !refreshForm) return;
-            const btn = refreshForm.querySelector('button[type="submit"]');
-            if (!btn) return;
-            btn.disabled = false;
-            const spinner = btn.querySelector('.button-spinner');
-            if (spinner) spinner.remove();
-        });
+            function setSyncStatus(text, isError) {
+                if (!syncStatus) return;
+                syncStatus.textContent = text;
+                syncStatus.hidden = !text;
+                syncStatus.classList.toggle('error', Boolean(isError));
+            }
+
+            function stopPoll() {
+                if (syncPoll) { clearInterval(syncPoll); syncPoll = null; }
+            }
+
+            function onSyncEnd() {
+                stopPoll();
+                if (!syncBtn) return;
+                syncBtn.disabled = false;
+                const s = syncBtn.querySelector('.button-spinner');
+                if (s) s.remove();
+            }
+
+            function pollStatus() {
+                fetch('{{ url_for("api_sync_status") }}')
+                    .then((r) => r.json())
+                    .then((data) => {
+                        if (data.status === 'running') {
+                            setSyncStatus('Syncing\u2026');
+                        } else if (data.status === 'done') {
+                            onSyncEnd();
+                            setSyncStatus('');
+                            window.location.reload();
+                        } else if (data.status === 'auth_expired') {
+                            onSyncEnd();
+                            window.location.href = '{{ url_for("login_page") }}';
+                        } else if (data.status === 'failed') {
+                            onSyncEnd();
+                            setSyncStatus(data.message || 'Sync failed', true);
+                        }
+                    })
+                    .catch(() => {});
+            }
+
+            if (syncBtn) {
+                syncBtn.addEventListener('click', () => {
+                    syncBtn.disabled = true;
+                    const spinner = document.createElement('span');
+                    spinner.className = 'button-spinner';
+                    syncBtn.insertBefore(spinner, syncBtn.firstChild);
+                    setSyncStatus('Starting\u2026');
+                    fetch('{{ url_for("refresh") }}', { method: 'POST' })
+                        .then((r) => {
+                            if (r.status === 202) {
+                                syncPoll = setInterval(pollStatus, 1500);
+                            } else {
+                                onSyncEnd();
+                                setSyncStatus('Failed to start sync', true);
+                            }
+                        })
+                        .catch(() => { onSyncEnd(); setSyncStatus('Network error', true); });
+                });
+            }
+        })();
 
         // ── Export links: brief spinner on the summary while download starts ───
         const exportSummary = document.querySelector('.export-menu summary');
