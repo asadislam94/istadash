@@ -634,6 +634,52 @@
             updateActiveLabel();
             updateExportLinks();
         }
+
+        // ── Refresh button: disable + spinner while the POST is in-flight ──────
+        const refreshForm = document.querySelector('form[action*="refresh"]');
+        if (refreshForm) {
+            refreshForm.addEventListener('submit', function () {
+                const btn = refreshForm.querySelector('button[type="submit"]');
+                if (!btn) return;
+                const spinner = document.createElement('span');
+                spinner.className = 'button-spinner';
+                btn.insertBefore(spinner, btn.firstChild);
+                btn.disabled = true;
+            });
+        }
+
+        // Re-enable if the browser restores the page from bfcache (Back button).
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted || !refreshForm) return;
+            const btn = refreshForm.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.disabled = false;
+            const spinner = btn.querySelector('.button-spinner');
+            if (spinner) spinner.remove();
+        });
+
+        // ── Export links: brief spinner on the summary while download starts ───
+        const exportSummary = document.querySelector('.export-menu summary');
+        document.querySelectorAll('.export-options a').forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (!exportSummary) return;
+                // Close the dropdown
+                exportMenu.removeAttribute('open');
+                // Add spinner + disable
+                const spinner = document.createElement('span');
+                spinner.className = 'button-spinner';
+                exportSummary.insertBefore(spinner, exportSummary.firstChild);
+                exportSummary.style.pointerEvents = 'none';
+                exportSummary.style.opacity = '0.65';
+                // Auto-restore after the download has had time to start
+                setTimeout(function () {
+                    const s = exportSummary.querySelector('.button-spinner');
+                    if (s) s.remove();
+                    exportSummary.style.pointerEvents = '';
+                    exportSummary.style.opacity = '';
+                }, 2500);
+            });
+        });
     </script>
 </body>
 </html>
