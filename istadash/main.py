@@ -7,6 +7,7 @@ import logging.handlers
 import os
 import secrets
 import sys
+import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -70,6 +71,47 @@ PENDING_TTL_MINUTES = 10
 log = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
+# Background sync state  (idle → running → done | failed | auth_expired)
+# ---------------------------------------------------------------------------
+_sync_lock = threading.Lock()
+_sync_state: dict = {
+    "status": "idle",
+    "message": "",
+    "started_at": None,
+    "result": None,
+}
+
+# ---------------------------------------------------------------------------
+# Query result cache — invalidated after every successful sync
+# ---------------------------------------------------------------------------
+_QUERY_CACHE_TTL = timedelta(seconds=60)
+_query_cache: dict = {"ts": None, "summary": None, "chart": None}
+
+
+def _invalidate_query_cache() -> None:
+    _query_cache["ts"] = None
+
+
+def _get_cached_summary(storage: Storage):
+    now = datetime.now(UTC)
+    if _query_cache["ts"] and now - _query_cache["ts"] < _QUERY_CACHE_TTL:
+        return _query_cache["summary"]
+    _query_cache["summary"] = storage.get_summary()
+    _query_cache["chart"] = storage.get_chart_points()
+    _query_cache["ts"] = now
+    return _query_cache["summary"]
+
+
+def _get_cached_chart(storage: Storage):
+    now = datetime.now(UTC)
+    if _query_cache["ts"] and now - _query_cache["ts"] < _QUERY_CACHE_TTL:
+        return _query_cache["chart"]
+    _query_cache["summary"] = storage.get_summary()
+    _query_cache["chart"] = storage.get_chart_points()
+    _query_cache["ts"] = now
+    return _query_cache["chart"]
+
+# ---------------------------------------------------------------------------
 # Update check - cached for 2 minutes; also runs on every startup
 # ---------------------------------------------------------------------------
 _CURRENT_VERSION: str = importlib.metadata.version("istadash")
@@ -116,6 +158,18 @@ def check_for_update() -> dict | None:
     _update_cache["latest"] = result
     return result
 
+
+def _parse_date(value: str | None) -> str | None:
+    """Validate and return a YYYY-MM-DD date string, or None if invalid."""
+    if not value:
+        return None
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
+    except ValueError:
+        return None
+
+
 def create_app() -> Flask:
     settings = Settings.from_file()
     app = Flask(__name__)
@@ -123,6 +177,10 @@ def create_app() -> Flask:
     app.config["SETTINGS"] = settings
     app.config["STORAGE"] = Storage(settings.database_path)
     _setup_log_capture()
+
+    # Warm the update cache in the background so the first browser request
+    # to /api/update-check never has to wait on the 5 s network timeout.
+    threading.Thread(target=check_for_update, daemon=True).start()
 
     def cleanup_pending_logins() -> None:
         cutoff = datetime.now(UTC) - timedelta(minutes=PENDING_TTL_MINUTES)
@@ -333,13 +391,16 @@ def create_app() -> Flask:
 
         storage: Storage = app.config["STORAGE"]
         daily_usage = storage.query_daily_usage(limit=2000)
-        summary = storage.get_summary()
+        summary = _get_cached_summary(storage)
         sync_runs = storage.list_sync_runs()
-        chart_points = storage.get_chart_points()
+        chart_points = _get_cached_chart(storage)
 
         daily_usage_rows = [dict(row) for row in daily_usage]
         chart_series = [dict(row) for row in chart_points]
         chart_unit = next((row["unit_of_measure"] for row in chart_series if row["unit_of_measure"]), "kWh")
+
+        last_sync = sync_runs[0] if sync_runs else None
+        last_synced_at = last_sync["finished_at"] if last_sync and last_sync["status"] == "success" else None
 
         return render_template(
             "index.html",
@@ -350,52 +411,99 @@ def create_app() -> Flask:
             chart_series=chart_series,
             chart_unit=chart_unit,
             current_version=_CURRENT_VERSION,
+            last_synced_at=last_synced_at,
         )
 
     @app.post("/refresh")
     def refresh():
-        log.debug("refresh: loading session token from secure storage")
         token = require_onboarded_session()
         if not token:
-            log.warning("refresh: no valid session token found — redirecting to login")
-            flash("Session expired. Please log in again.", "error")
-            return redirect(url_for("login_page"))
-
-        log.info("refresh: starting sync (token length=%d)", len(token))
-        storage: Storage = app.config["STORAGE"]
-        try:
-            report = run_sync(settings, storage, session_cookie=token)
-        except AuthorizationExpiredError as exc:
-            log.warning(
-                "refresh: ista session expired during sync — clearing stored token and "
-                "redirecting to login. Error: %s",
-                exc,
+            return Response(
+                json.dumps({"error": "auth", "message": "Session expired"}),
+                status=401,
+                mimetype="application/json",
             )
-            clear_session_cookie()
-            flash("Session expired. Please log in again.", "error")
-            return redirect(url_for("login_page"))
-        except Exception as exc:
-            log.exception("refresh: unexpected error during sync — %s", exc)
-            flash(f"Refresh failed: {exc}", "error")
-            return redirect(url_for("index"))
 
-        flash(
-            (
-                f"Refresh completed for meter {report.selected_meter_id}"
-                f" ({report.selected_utility or 'Unknown utility'}). "
-                f"Fetched {report.fetched_count} reads and inserted {report.inserted_count} new rows."
-            ),
-            "success",
+        with _sync_lock:
+            if _sync_state["status"] == "running":
+                return Response(
+                    json.dumps({"status": "running", "message": "Sync already in progress"}),
+                    status=409,
+                    mimetype="application/json",
+                )
+            _sync_state.update({
+                "status": "running",
+                "message": "Connecting to ista…",
+                "started_at": datetime.now(UTC).isoformat(),
+                "result": None,
+            })
+
+        storage: Storage = app.config["STORAGE"]
+
+        def _run_bg() -> None:
+            try:
+                report = run_sync(settings, storage, session_cookie=token)
+                _invalidate_query_cache()
+                msg = (
+                    f"Fetched {report.fetched_count} reads, "
+                    f"{report.inserted_count} new rows for meter {report.selected_meter_id}."
+                )
+                with _sync_lock:
+                    _sync_state.update({
+                        "status": "done",
+                        "message": msg,
+                        "result": {
+                            "meter_id": report.selected_meter_id,
+                            "utility": report.selected_utility,
+                            "fetched": report.fetched_count,
+                            "inserted": report.inserted_count,
+                        },
+                    })
+                log.info("refresh (bg): %s", msg)
+            except AuthorizationExpiredError as exc:
+                clear_session_cookie()
+                with _sync_lock:
+                    _sync_state.update({"status": "auth_expired", "message": "Session expired."})
+                log.warning("refresh (bg): session expired — %s", exc)
+            except Exception as exc:
+                with _sync_lock:
+                    _sync_state.update({"status": "failed", "message": str(exc)})
+                log.exception("refresh (bg): unexpected error — %s", exc)
+
+        threading.Thread(target=_run_bg, daemon=True).start()
+        return Response(
+            json.dumps({"status": "started"}),
+            status=202,
+            mimetype="application/json",
         )
-        return redirect(url_for("index"))
+
+    @app.get("/api/sync-status")
+    def api_sync_status():
+        with _sync_lock:
+            state = dict(_sync_state)
+        return Response(json.dumps(state), mimetype="application/json")
+
+    @app.get("/api/summary")
+    def api_summary():
+        if not require_onboarded_session():
+            return Response(json.dumps({"error": "auth"}), status=401, mimetype="application/json")
+        storage: Storage = app.config["STORAGE"]
+        summary = storage.get_summary()
+        sync_runs = storage.list_sync_runs(limit=1)
+        last_sync = sync_runs[0] if sync_runs else None
+        last_synced_at = last_sync["finished_at"] if last_sync and last_sync["status"] == "success" else None
+        return Response(
+            json.dumps(dict(summary) | {"last_synced_at": last_synced_at}),
+            mimetype="application/json",
+        )
 
     @app.get("/export.csv")
     def export_csv():
         if not require_onboarded_session():
             return redirect(url_for("login_page"))
         storage: Storage = app.config["STORAGE"]
-        start_date = request.args.get("start_date") or None
-        end_date = request.args.get("end_date") or None
+        start_date = _parse_date(request.args.get("start_date"))
+        end_date = _parse_date(request.args.get("end_date"))
         export_path = storage.export_readings_csv(
             settings.export_dir / "readings.csv",
             start_date=start_date,
@@ -408,8 +516,8 @@ def create_app() -> Flask:
         if not require_onboarded_session():
             return redirect(url_for("login_page"))
         storage: Storage = app.config["STORAGE"]
-        start_date = request.args.get("start_date") or None
-        end_date = request.args.get("end_date") or None
+        start_date = _parse_date(request.args.get("start_date"))
+        end_date = _parse_date(request.args.get("end_date"))
         usage_rows = [dict(row) for row in storage.query_daily_usage(
             date_from=start_date,
             date_to=end_date,
