@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib.metadata
 import json
 import logging
 import logging.handlers
@@ -7,6 +8,7 @@ import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+import requests
 from flask import (
     Flask,
     Response,
@@ -26,7 +28,7 @@ from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
 # ---------------------------------------------------------------------------
-# File-based logging – persists across page reloads
+# File-based logging - persists across page reloads
 # ---------------------------------------------------------------------------
 LOG_FILE = Path.home() / ".local" / "share" / "istadash" / "istadash.log"
 
@@ -51,6 +53,49 @@ PENDING_TTL_MINUTES = 10
 
 log = logging.getLogger(__name__)
 
+# ---------------------------------------------------------------------------
+# Update check - cached for 2 minutes; also runs on every startup
+# ---------------------------------------------------------------------------
+_CURRENT_VERSION: str = importlib.metadata.version("istadash")
+_RELEASES_URL = "https://api.github.com/repos/asadislam94/istadash/releases/latest"
+_RELEASE_PAGE = "https://github.com/asadislam94/istadash/releases"
+
+_update_cache: dict = {"checked_at": None, "latest": None, "url": None}
+_UPDATE_CACHE_TTL = timedelta(minutes=2)
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    try:
+        return tuple(int(x) for x in v.lstrip("v").split("."))
+    except ValueError:
+        return (0,)
+
+
+def check_for_update() -> dict | None:
+    """Return dict(latest, url) if a newer release exists, else None."""
+    now = datetime.now(UTC)
+    if _update_cache["checked_at"] and now - _update_cache["checked_at"] < _UPDATE_CACHE_TTL:
+        return _update_cache["latest"]
+
+    log.info("check_for_update: checking for new version (current: v%s)", _CURRENT_VERSION)
+    try:
+        resp = requests.get(_RELEASES_URL, timeout=5, headers={"Accept": "application/vnd.github+json"})
+        resp.raise_for_status()
+        data = resp.json()
+        tag = data.get("tag_name", "")
+        html_url = data.get("html_url", _RELEASE_PAGE)
+        log.info("check_for_update: current=v%s latest=%s", _CURRENT_VERSION, tag)
+        if _version_tuple(tag) > _version_tuple(_CURRENT_VERSION):
+            result = {"latest": tag.lstrip("v"), "url": html_url}
+        else:
+            result = None
+    except Exception as exc:
+        log.warning("check_for_update: request failed — %s", exc)
+        result = None
+
+    _update_cache["checked_at"] = now
+    _update_cache["latest"] = result
+    return result
 
 def create_app() -> Flask:
     settings = Settings.from_file()
@@ -248,6 +293,21 @@ def create_app() -> Flask:
         flash("Secure session cleared. Please log in again.", "success")
         return redirect(url_for("login_page"))
 
+    @app.post("/clear-session")
+    def clear_session_route():
+        """Explicit user-triggered session clear — use when auto re-login detection fails."""
+        log.info(
+            "clear_session_route: user manually cleared session — "
+            "clearing stored token and redirecting to login"
+        )
+        clear_session_cookie()
+        session.clear()
+        flash(
+            "Session cleared. Please log in again to reconnect to ista.",
+            "success",
+        )
+        return redirect(url_for("login_page"))
+
     @app.get("/")
     def index():
         token = require_onboarded_session()
@@ -272,25 +332,33 @@ def create_app() -> Flask:
             sync_runs=sync_runs,
             chart_series=chart_series,
             chart_unit=chart_unit,
+            current_version=_CURRENT_VERSION,
         )
 
     @app.post("/refresh")
     def refresh():
+        log.debug("refresh: loading session token from secure storage")
         token = require_onboarded_session()
         if not token:
+            log.warning("refresh: no valid session token found — redirecting to login")
             flash("Session expired. Please log in again.", "error")
             return redirect(url_for("login_page"))
 
+        log.info("refresh: starting sync (token length=%d)", len(token))
         storage: Storage = app.config["STORAGE"]
         try:
             report = run_sync(settings, storage, session_cookie=token)
         except AuthorizationExpiredError as exc:
-            log.warning("refresh: session expired — %s", exc)
+            log.warning(
+                "refresh: ista session expired during sync — clearing stored token and "
+                "redirecting to login. Error: %s",
+                exc,
+            )
             clear_session_cookie()
             flash("Session expired. Please log in again.", "error")
             return redirect(url_for("login_page"))
         except Exception as exc:
-            log.exception("refresh: unexpected error during sync")
+            log.exception("refresh: unexpected error during sync — %s", exc)
             flash(f"Refresh failed: {exc}", "error")
             return redirect(url_for("index"))
 
@@ -350,6 +418,15 @@ def create_app() -> Flask:
             total = 0
             lines = []
         return Response(json.dumps({"lines": lines, "total": total}), mimetype="application/json")
+
+    @app.get("/api/update-check")
+    def api_update_check():
+        """Run (or return cached) update check. Called by the frontend after page load."""
+        result = check_for_update()
+        return Response(
+            json.dumps({"update": result, "current": _CURRENT_VERSION}),
+            mimetype="application/json",
+        )
 
     return app
 

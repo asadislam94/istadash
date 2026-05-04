@@ -203,10 +203,48 @@ class IstaClient:
             data=data,
             timeout=self.settings.request_timeout_seconds,
         )
+        log.debug(
+            "_request_json %s %s — HTTP %s, final_url=%s, content_type=%s",
+            method, path, response.status_code, response.url,
+            response.headers.get("Content-Type", ""),
+        )
+
+        # Detect redirect to login page: requests follows the redirect transparently,
+        # so the final URL will differ from the requested path when the session expires.
+        if "/auth/login" in response.url:
+            log.warning(
+                "_request_json %s %s — final URL is login page (%s) — session has expired",
+                method, path, response.url,
+            )
+            raise AuthorizationExpiredError(
+                f"ista session expired — redirected to {response.url}"
+            )
+
         if response.status_code in (401, 403):
-            log.warning("_request_json %s %s — HTTP %s (authorization expired)", method, path, response.status_code)
+            log.warning(
+                "_request_json %s %s — HTTP %s (authorization expired)",
+                method, path, response.status_code,
+            )
             raise AuthorizationExpiredError("ista authorization expired")
         response.raise_for_status()
+
+        # Detect unexpected HTML (e.g. a login page returned with 200 after a soft redirect).
+        content_type = response.headers.get("Content-Type", "")
+        if "text/html" in content_type:
+            preview = response.text[:400].strip().replace("\n", " ")
+            body_lower = response.text.lower()
+            log.warning(
+                "_request_json %s %s — HTML response received (Content-Type=%s). "
+                "This usually means the session expired and the server returned a login page. "
+                "Preview: %s",
+                method, path, content_type, preview[:250],
+            )
+            if "login" in body_lower or "sign in" in body_lower or "password" in body_lower:
+                raise AuthorizationExpiredError(
+                    f"ista session expired — login page returned as HTML for {path}"
+                )
+            raise IstaError(f"unexpected HTML response from {path}: {preview[:200]}")
+
         try:
             payload = response.json()
         except ValueError as exc:
@@ -216,10 +254,16 @@ class IstaClient:
 
         status_code = payload.get("StatusCode")
         if status_code in (401, 403):
-            log.warning("_request_json %s %s — payload StatusCode %s (authorization expired)", method, path, status_code)
+            log.warning(
+                "_request_json %s %s — payload StatusCode %s (authorization expired)",
+                method, path, status_code,
+            )
             raise AuthorizationExpiredError("ista authorization expired")
         if status_code not in (None, 200):
             message = payload.get("Message") or payload.get("Error") or json.dumps(payload)[:250]
-            log.error("_request_json %s %s — StatusCode %s: %s", method, path, status_code, message)
+            log.error(
+                "_request_json %s %s — StatusCode %s: %s",
+                method, path, status_code, message,
+            )
             raise IstaError(f"ista request to {path} failed with status {status_code}: {message}")
         return payload

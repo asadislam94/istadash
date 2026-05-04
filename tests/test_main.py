@@ -59,7 +59,7 @@ class DesktopEntryPointTests(unittest.TestCase):
                             libxcb-shape0 libxcb-xkb1 libxkbcommon-x11-0
         """
         try:
-            import webview  # noqa: F401
+            import webview
         except ImportError as exc:
             self.fail(f"'import webview' failed — install pywebview[qt]: {exc}")
 

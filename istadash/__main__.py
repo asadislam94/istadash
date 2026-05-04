@@ -5,6 +5,15 @@ import socket
 import threading
 import time
 import urllib.request
+import webbrowser
+
+
+class BrowserAPI:
+    """Exposed to JS via window.pywebview.api — lets the page open URLs in the real browser."""
+
+    def open_url(self, url: str) -> None:
+        if isinstance(url, str) and url.startswith(("http://", "https://")):
+            webbrowser.open(url)
 
 
 def _find_free_port() -> int:
@@ -60,7 +69,7 @@ def main() -> None:
     url = f"http://127.0.0.1:{port}"
     _wait_for_server(url)
 
-    webview.create_window("IstaDash", url, width=1200, height=800, resizable=True)
+    webview.create_window("IstaDash", url, width=1200, height=800, resizable=True, js_api=BrowserAPI())
     webview.start()
 
 

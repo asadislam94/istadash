@@ -43,6 +43,35 @@ body::before {
     padding: 2rem 0 4rem;
 }
 
+.update-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    background: rgba(47, 111, 94, 0.12);
+    border: 1px solid rgba(47, 111, 94, 0.3);
+    border-radius: 14px;
+    padding: 0.7rem 1rem;
+    margin-bottom: 1rem;
+    font-size: 0.9rem;
+    color: var(--text);
+}
+
+.update-banner-link {
+    flex-shrink: 0;
+    font-weight: 600;
+    color: var(--accent-2);
+    text-decoration: none;
+    border: 1px solid rgba(47, 111, 94, 0.4);
+    border-radius: 999px;
+    padding: 0.3rem 0.75rem;
+    transition: background 160ms ease;
+}
+
+.update-banner-link:hover {
+    background: rgba(47, 111, 94, 0.15);
+}
+
 .panel {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -126,7 +155,8 @@ h2 {
     display: flex;
     gap: 0.8rem;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    white-space: nowrap;
 }
 
 .hero-side {
@@ -163,6 +193,79 @@ h2 {
 
 .export-menu {
     position: relative;
+}
+
+.refresh-group {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+}
+
+.refresh-group > form {
+    display: contents;
+}
+
+.refresh-group > form > .button.primary {
+    border-radius: 999px 0 0 999px;
+}
+
+.refresh-group > .clear-menu {
+    display: flex;
+}
+
+.refresh-group > .clear-menu > summary {
+    display: flex;
+    align-items: center;
+}
+
+.button.icon-btn {
+    border-radius: 0 999px 999px 0;
+    padding: 0.9rem 0.85rem;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.clear-menu {
+    position: relative;
+}
+
+.clear-menu summary {
+    list-style: none;
+}
+
+.clear-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.clear-options {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    min-width: 180px;
+    background: #fffdf8;
+    border: 1px solid rgba(36, 49, 38, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 14px 30px rgba(36, 49, 38, 0.12);
+    overflow: hidden;
+    z-index: 3;
+}
+
+.clear-option {
+    display: block;
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--accent-3);
+    font: inherit;
+    font-weight: 500;
+}
+
+.clear-option:hover {
+    background: rgba(198, 79, 58, 0.1);
 }
 
 .export-menu summary {
@@ -227,6 +330,33 @@ h2 {
     border-color: rgba(36, 49, 38, 0.12);
 }
 
+.button:disabled {
+    opacity: 0.65;
+    cursor: not-allowed;
+    transform: none;
+    pointer-events: none;
+}
+
+.button-spinner {
+    width: 1em;
+    height: 1em;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: btn-spin 0.6s linear infinite;
+    margin-right: 0.5em;
+    flex-shrink: 0;
+}
+
+.button.secondary .button-spinner {
+    border-color: rgba(36, 49, 38, 0.2);
+    border-top-color: var(--text);
+}
+
+@keyframes btn-spin {
+    to { transform: rotate(360deg); }
+}
+
 .messages {
     display: grid;
     gap: 0.8rem;
@@ -282,15 +412,8 @@ h2 {
     flex-wrap: wrap;
 }
 
-.chart-mode-buttons {
-    display: flex;
-    gap: 0.55rem;
-    flex-wrap: wrap;
-}
-
 .range-button,
-.tab-button,
-.mode-button {
+.tab-button {
     border-radius: 999px;
     border: 1px solid rgba(36, 49, 38, 0.16);
     background: rgba(255, 255, 255, 0.72);
@@ -303,15 +426,13 @@ h2 {
 }
 
 .range-button:hover,
-.tab-button:hover,
-.mode-button:hover {
+.tab-button:hover {
     border-color: rgba(36, 49, 38, 0.32);
     background: rgba(255, 255, 255, 0.92);
 }
 
 .range-button.active,
-.tab-button.active,
-.mode-button.active {
+.tab-button.active {
     background: var(--text);
     color: #fff;
     border-color: var(--text);
@@ -380,45 +501,6 @@ h2 {
     font-size: 0.85em;
 }
 
-
-
-.stat-card {
-    padding: 1.35rem;
-    position: relative;
-    overflow: hidden;
-}
-
-.stat-card p,
-.config-list dt {
-    margin: 0;
-    color: var(--muted);
-}
-
-.stat-card strong {
-    display: block;
-    margin-top: 0.4rem;
-    font-size: clamp(1.4rem, 4vw, 2.4rem);
-}
-
-.accent-a::after,
-.accent-b::after,
-.accent-c::after,
-.accent-d::after {
-    content: "";
-    position: absolute;
-    width: 7rem;
-    height: 7rem;
-    border-radius: 50%;
-    top: -2rem;
-    right: -2rem;
-    opacity: 0.18;
-}
-
-.accent-a::after { background: var(--accent-1); }
-.accent-b::after { background: var(--accent-2); }
-.accent-c::after { background: var(--accent-3); }
-.accent-d::after { background: var(--accent-4); }
-
 .panel-header {
     display: flex;
     justify-content: space-between;
@@ -427,26 +509,12 @@ h2 {
     margin-bottom: 1rem;
 }
 
-.chart-panel,
-.filter-panel,
-.table-panel,
 .history-panel {
     padding: 1.3rem;
 }
 
 #readsChart {
     width: 100%;
-}
-
-.filters {
-    display: grid;
-    gap: 0.9rem;
-}
-
-.filters label,
-.config-list div {
-    display: grid;
-    gap: 0.35rem;
 }
 
 input {
@@ -457,17 +525,6 @@ input {
     padding: 0.8rem 0.9rem;
     font: inherit;
     color: var(--text);
-}
-
-.config-list {
-    display: grid;
-    gap: 0.8rem;
-    margin: 1.2rem 0 0;
-}
-
-.config-list dd {
-    margin: 0;
-    word-break: break-word;
 }
 
 .table-wrap {
@@ -537,13 +594,8 @@ thead th {
 }
 
 @media (max-width: 980px) {
-    .hero,
-    .dashboard-grid,
-    .summary-grid {
-        grid-template-columns: 1fr;
-    }
-
     .hero {
+        grid-template-columns: 1fr;
         align-items: start;
         flex-direction: column;
     }

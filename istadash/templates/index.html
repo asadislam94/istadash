@@ -12,6 +12,10 @@
 </head>
 <body>
     <main class="shell">
+        <div class="update-banner" id="updateBanner" hidden role="status">
+            <span>&#x25B2; A new version <strong id="updateVersion"></strong> is available &mdash; you&rsquo;re on v{{ current_version }}.</span>
+            <button class="update-banner-link" id="updateLink" type="button">View release</button>
+        </div>
         <section class="hero panel">
             <div>
                 <p class="eyebrow">Local ista meter dashboard</p>
@@ -20,9 +24,19 @@
             </div>
             <div class="hero-side">
                 <div class="actions">
-                    <form action="{{ url_for('refresh') }}" method="post">
-                        <button class="button primary" type="submit">Refresh from ista</button>
-                    </form>
+                    <div class="refresh-group">
+                        <form action="{{ url_for('refresh') }}" method="post">
+                            <button class="button primary" type="submit">Sync data</button>
+                        </form>
+                        <details class="clear-menu">
+                            <summary class="button primary icon-btn" title="More actions">▾</summary>
+                            <div class="clear-options">
+                                <form action="{{ url_for('clear_session_route') }}" method="post">
+                                    <button class="clear-option" type="submit">Clear all &amp; re-login</button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                     <details class="export-menu">
                         <summary class="button secondary">Export</summary>
                         <div class="export-options">
@@ -290,6 +304,35 @@
             logsDrawer.hidden = true;
             logsToggle.setAttribute('aria-expanded', 'false');
             stopPolling();
+        });
+
+        // Close <details> dropdowns when clicking outside them
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('details[open]').forEach((det) => {
+                if (!det.contains(e.target)) {
+                    det.removeAttribute('open');
+                }
+            });
+        });
+
+        // Check for updates after page load
+        window.addEventListener('load', () => {
+            fetch('{{ url_for("api_update_check") }}')
+                .then((r) => r.json())
+                .then(({ update }) => {
+                    if (!update) return;
+                    document.getElementById('updateVersion').textContent = 'v' + update.latest;
+                    const btn = document.getElementById('updateLink');
+                    btn.addEventListener('click', () => {
+                        if (window.pywebview && window.pywebview.api) {
+                            window.pywebview.api.open_url(update.url);
+                        } else {
+                            window.open(update.url, '_blank');
+                        }
+                    });
+                    document.getElementById('updateBanner').hidden = false;
+                })
+                .catch(() => {/* silently ignore */});
         });
 
     </script>
@@ -634,6 +677,52 @@
             updateActiveLabel();
             updateExportLinks();
         }
+
+        // ── Refresh button: disable + spinner while the POST is in-flight ──────
+        const refreshForm = document.querySelector('form[action*="refresh"]');
+        if (refreshForm) {
+            refreshForm.addEventListener('submit', function () {
+                const btn = refreshForm.querySelector('button[type="submit"]');
+                if (!btn) return;
+                const spinner = document.createElement('span');
+                spinner.className = 'button-spinner';
+                btn.insertBefore(spinner, btn.firstChild);
+                btn.disabled = true;
+            });
+        }
+
+        // Re-enable if the browser restores the page from bfcache (Back button).
+        window.addEventListener('pageshow', function (e) {
+            if (!e.persisted || !refreshForm) return;
+            const btn = refreshForm.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.disabled = false;
+            const spinner = btn.querySelector('.button-spinner');
+            if (spinner) spinner.remove();
+        });
+
+        // ── Export links: brief spinner on the summary while download starts ───
+        const exportSummary = document.querySelector('.export-menu summary');
+        document.querySelectorAll('.export-options a').forEach(function (link) {
+            link.addEventListener('click', function () {
+                if (!exportSummary) return;
+                // Close the dropdown
+                exportMenu.removeAttribute('open');
+                // Add spinner + disable
+                const spinner = document.createElement('span');
+                spinner.className = 'button-spinner';
+                exportSummary.insertBefore(spinner, exportSummary.firstChild);
+                exportSummary.style.pointerEvents = 'none';
+                exportSummary.style.opacity = '0.65';
+                // Auto-restore after the download has had time to start
+                setTimeout(function () {
+                    const s = exportSummary.querySelector('.button-spinner');
+                    if (s) s.remove();
+                    exportSummary.style.pointerEvents = '';
+                    exportSummary.style.opacity = '';
+                }, 2500);
+            });
+        });
     </script>
 </body>
 </html>
