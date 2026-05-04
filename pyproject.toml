@@ -83,5 +83,6 @@ requires = [
 [tool.briefcase.app.istadash.linux]
 
 [tool.briefcase.app.istadash.windows]
-upgrade_code = "{DB447C3B-BD6D-487B-A5A5-2E8FDDC70D46}"
+guid = "483f8263-af22-5072-8c12-d5b1818888fa"
+system_installer = true
 use_full_install_path = false
