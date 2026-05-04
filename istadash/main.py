@@ -248,6 +248,21 @@ def create_app() -> Flask:
         flash("Secure session cleared. Please log in again.", "success")
         return redirect(url_for("login_page"))
 
+    @app.post("/clear-session")
+    def clear_session_route():
+        """Explicit user-triggered session clear — use when auto re-login detection fails."""
+        log.info(
+            "clear_session_route: user manually cleared session — "
+            "clearing stored token and redirecting to login"
+        )
+        clear_session_cookie()
+        session.clear()
+        flash(
+            "Session cleared. Please log in again to reconnect to ista.",
+            "success",
+        )
+        return redirect(url_for("login_page"))
+
     @app.get("/")
     def index():
         token = require_onboarded_session()
@@ -276,21 +291,28 @@ def create_app() -> Flask:
 
     @app.post("/refresh")
     def refresh():
+        log.debug("refresh: loading session token from secure storage")
         token = require_onboarded_session()
         if not token:
+            log.warning("refresh: no valid session token found — redirecting to login")
             flash("Session expired. Please log in again.", "error")
             return redirect(url_for("login_page"))
 
+        log.info("refresh: starting sync (token length=%d)", len(token))
         storage: Storage = app.config["STORAGE"]
         try:
             report = run_sync(settings, storage, session_cookie=token)
         except AuthorizationExpiredError as exc:
-            log.warning("refresh: session expired — %s", exc)
+            log.warning(
+                "refresh: ista session expired during sync — clearing stored token and "
+                "redirecting to login. Error: %s",
+                exc,
+            )
             clear_session_cookie()
             flash("Session expired. Please log in again.", "error")
             return redirect(url_for("login_page"))
         except Exception as exc:
-            log.exception("refresh: unexpected error during sync")
+            log.exception("refresh: unexpected error during sync — %s", exc)
             flash(f"Refresh failed: {exc}", "error")
             return redirect(url_for("index"))
 

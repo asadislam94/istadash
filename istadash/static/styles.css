@@ -126,7 +126,8 @@ h2 {
     display: flex;
     gap: 0.8rem;
     align-items: center;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
+    white-space: nowrap;
 }
 
 .hero-side {
@@ -163,6 +164,79 @@ h2 {
 
 .export-menu {
     position: relative;
+}
+
+.refresh-group {
+    display: flex;
+    align-items: stretch;
+    gap: 2px;
+}
+
+.refresh-group > form {
+    display: contents;
+}
+
+.refresh-group > form > .button.primary {
+    border-radius: 999px 0 0 999px;
+}
+
+.refresh-group > .clear-menu {
+    display: flex;
+}
+
+.refresh-group > .clear-menu > summary {
+    display: flex;
+    align-items: center;
+}
+
+.button.icon-btn {
+    border-radius: 0 999px 999px 0;
+    padding: 0.9rem 0.85rem;
+    font-size: 0.8rem;
+    line-height: 1;
+}
+
+.clear-menu {
+    position: relative;
+}
+
+.clear-menu summary {
+    list-style: none;
+}
+
+.clear-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+.clear-options {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    min-width: 180px;
+    background: #fffdf8;
+    border: 1px solid rgba(36, 49, 38, 0.14);
+    border-radius: 12px;
+    box-shadow: 0 14px 30px rgba(36, 49, 38, 0.12);
+    overflow: hidden;
+    z-index: 3;
+}
+
+.clear-option {
+    display: block;
+    width: 100%;
+    padding: 0.65rem 0.8rem;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    color: var(--accent-3);
+    font: inherit;
+    font-weight: 500;
+}
+
+.clear-option:hover {
+    background: rgba(198, 79, 58, 0.1);
 }
 
 .export-menu summary {

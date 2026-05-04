@@ -20,9 +20,19 @@
             </div>
             <div class="hero-side">
                 <div class="actions">
-                    <form action="{{ url_for('refresh') }}" method="post">
-                        <button class="button primary" type="submit">Refresh from ista</button>
-                    </form>
+                    <div class="refresh-group">
+                        <form action="{{ url_for('refresh') }}" method="post">
+                            <button class="button primary" type="submit">Sync data</button>
+                        </form>
+                        <details class="clear-menu">
+                            <summary class="button primary icon-btn" title="More actions">▾</summary>
+                            <div class="clear-options">
+                                <form action="{{ url_for('clear_session_route') }}" method="post">
+                                    <button class="clear-option" type="submit">Clear all &amp; re-login</button>
+                                </form>
+                            </div>
+                        </details>
+                    </div>
                     <details class="export-menu">
                         <summary class="button secondary">Export</summary>
                         <div class="export-options">
@@ -290,6 +300,15 @@
             logsDrawer.hidden = true;
             logsToggle.setAttribute('aria-expanded', 'false');
             stopPolling();
+        });
+
+        // Close <details> dropdowns when clicking outside them
+        document.addEventListener('click', (e) => {
+            document.querySelectorAll('details[open]').forEach((det) => {
+                if (!det.contains(e.target)) {
+                    det.removeAttribute('open');
+                }
+            });
         });
 
     </script>
