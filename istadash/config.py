@@ -137,8 +137,8 @@ class Settings:
             payload = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
 
         flask_secret = payload.get("flask_secret_key") or secrets.token_hex(24)
-        database_path = Path(payload.get("database_path", DATA_DIR / "meter_reads.db"))
-        export_dir = Path(payload.get("export_dir", DATA_DIR / "exports"))
+        database_path = DATA_DIR / "meter_reads.db"
+        export_dir = DATA_DIR / "exports"
 
         database_path.parent.mkdir(parents=True, exist_ok=True)
         export_dir.mkdir(parents=True, exist_ok=True)
@@ -167,8 +167,6 @@ class Settings:
             "base_url": self.base_url,
             "meter_id": self.meter_id,
             "property_scope": self.property_scope,
-            "database_path": str(self.database_path),
-            "export_dir": str(self.export_dir),
             "flask_secret_key": self.flask_secret_key,
             "flask_host": self.flask_host,
             "flask_port": self.flask_port,
