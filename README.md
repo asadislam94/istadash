@@ -26,6 +26,22 @@ Local energy dashboard for syncing heat meter readings from the [My ista UK port
 
 ---
 
+## Screenshots
+
+### Dashboard overview
+
+![IstaDash dashboard overview](screenshots/header.png)
+
+### Usage graph
+
+![IstaDash usage graph view](screenshots/graph.png)
+
+### Readings table
+
+![IstaDash readings table view](screenshots/table.png)
+
+---
+
 ## Requirements
 
 | OS | Supported |
