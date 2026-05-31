@@ -46,6 +46,12 @@
                         <span>Password</span>
                         <input type="password" name="password" required autocomplete="current-password">
                     </label>
+                    {% if not no_keyring %}
+                    <label class="login-form__checkbox">
+                        <input type="checkbox" name="save_credentials" value="1">
+                        <span>Save credentials for automatic re-login when session expires</span>
+                    </label>
+                    {% endif %}
                     <button class="button primary" type="submit">Continue</button>
                 </form>
             {% elif stage == 'property' %}

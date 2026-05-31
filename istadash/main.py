@@ -25,7 +25,14 @@ from flask import (
 
 from istadash.config import DATA_DIR, Settings
 from istadash.ista_client import AuthenticationError, AuthorizationExpiredError, IstaClient
-from istadash.security import clear_session_cookie, load_session_cookie, save_session_cookie
+from istadash.security import (
+    clear_credentials,
+    clear_session_cookie,
+    load_credentials,
+    load_session_cookie,
+    save_credentials,
+    save_session_cookie,
+)
 from istadash.services.sync import run_sync
 from istadash.storage import Storage
 
@@ -229,10 +236,12 @@ def create_app() -> Flask:
             flash("Login succeeded but no session token was returned.", "error")
             return redirect(url_for("login_page"))
 
+        save_credentials_flag = request.form.get("save_credentials") == "1"
         login_id = secrets.token_urlsafe(24)
         PENDING_LOGINS[login_id] = {
             "username": username,
             "password": password,
+            "save_credentials": save_credentials_flag,
             "created_at": datetime.now(UTC),
         }
 
@@ -334,6 +343,8 @@ def create_app() -> Flask:
             return redirect(url_for("login_page"))
 
         save_session_cookie(cookie_value)
+        if pending.get("save_credentials"):
+            save_credentials(pending["username"], pending["password"])
         settings.update_selection(meter_id=int(meter_id), property_scope=str(property_scope))
         PENDING_LOGINS.pop(login_id, None)
 
@@ -363,6 +374,7 @@ def create_app() -> Flask:
     @app.get("/logout")
     def logout():
         clear_session_cookie()
+        clear_credentials()
         session.clear()
         flash("Secure session cleared. Please log in again.", "success")
         return redirect(url_for("login_page"))
@@ -460,10 +472,48 @@ def create_app() -> Flask:
                     })
                 log.info("refresh (bg): %s", msg)
             except AuthorizationExpiredError as exc:
+                log.warning("refresh (bg): session expired — %s", exc)
+                creds = load_credentials()
+                if creds:
+                    username, password = creds
+                    log.info("refresh (bg): saved credentials found, attempting auto-relogin")
+                    try:
+                        new_client = IstaClient(settings)
+                        new_client.login_with_credentials(
+                            username=username,
+                            password=password,
+                            scope=settings.property_scope,
+                        )
+                        new_cookie = new_client.get_session_cookie()
+                        if new_cookie:
+                            save_session_cookie(new_cookie)
+                            log.info("refresh (bg): auto-relogin succeeded, retrying sync")
+                            report = run_sync(settings, storage, session_cookie=new_cookie)
+                            _invalidate_query_cache()
+                            msg = (
+                                f"Session renewed automatically. "
+                                f"Fetched {report.fetched_count} reads, "
+                                f"{report.inserted_count} new rows for meter {report.selected_meter_id}."
+                            )
+                            with _sync_lock:
+                                _sync_state.update({
+                                    "status": "done",
+                                    "message": msg,
+                                    "result": {
+                                        "meter_id": report.selected_meter_id,
+                                        "utility": report.selected_utility,
+                                        "fetched": report.fetched_count,
+                                        "inserted": report.inserted_count,
+                                    },
+                                })
+                            log.info("refresh (bg): auto-relogin sync done: %s", msg)
+                            return
+                    except Exception as relogin_exc:
+                        log.exception("refresh (bg): auto-relogin failed — %s", relogin_exc)
                 clear_session_cookie()
                 with _sync_lock:
                     _sync_state.update({"status": "auth_expired", "message": "Session expired."})
-                log.warning("refresh (bg): session expired — %s", exc)
+                log.warning("refresh (bg): session expired, manual re-login required")
             except Exception as exc:
                 with _sync_lock:
                     _sync_state.update({"status": "failed", "message": str(exc)})
