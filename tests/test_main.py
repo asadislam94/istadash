@@ -3,7 +3,9 @@ from __future__ import annotations
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
+from urllib.parse import parse_qs, urlparse
 
 
 class MainRouteTests(unittest.TestCase):
@@ -29,7 +31,19 @@ class MainRouteTests(unittest.TestCase):
 
         flask_app = create_app()
         flask_app.config["TESTING"] = True
+        self.app = flask_app
         self.client = flask_app.test_client()
+
+        from istadash.main import _sync_state
+
+        _sync_state.update(
+            {
+                "status": "idle",
+                "message": "",
+                "started_at": None,
+                "result": None,
+            }
+        )
 
     def tearDown(self) -> None:
         for p in self._patches:
@@ -67,6 +81,217 @@ class MainRouteTests(unittest.TestCase):
         self.assertIsNone(_parse_date("2026/01/15"))
         self.assertIsNone(_parse_date("not-a-date"))
         self.assertIsNone(_parse_date("'; DROP TABLE readings; --"))
+
+    def test_login_page_shows_save_credentials_checkbox_when_keyring_available(self) -> None:
+        with mock.patch("istadash.security._has_keyring", return_value=True):
+            response = self.client.get("/login")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"name=\"save_credentials\"", response.data)
+
+    def test_login_page_hides_save_credentials_checkbox_when_keyring_unavailable(self) -> None:
+        with mock.patch("istadash.security._has_keyring", return_value=False):
+            response = self.client.get("/login")
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn(b"name=\"save_credentials\"", response.data)
+
+    def test_full_login_flow_saves_credentials_when_selected(self) -> None:
+        ista_client = mock.Mock()
+        ista_client.login_with_credentials.return_value = True
+        ista_client.get_properties.return_value = [{"CustId": "P-1", "Active": True, "AddressLine1": "One St"}]
+        ista_client.get_meters.return_value = [
+            {"MeterID": 101, "MeterStatus": "Active", "TypeDescription": "Gas", "MeterNo": "G-1"}
+        ]
+        ista_client.get_session_cookie.return_value = "cookie-abc"
+
+        report = SimpleNamespace(
+            selected_meter_id=101,
+            selected_utility="Gas",
+            fetched_count=5,
+            inserted_count=2,
+        )
+
+        with (
+            mock.patch("istadash.main.IstaClient", return_value=ista_client),
+            mock.patch("istadash.main.save_session_cookie") as save_cookie,
+            mock.patch("istadash.main.save_credentials") as save_creds,
+            mock.patch("istadash.main.run_sync", return_value=report),
+        ):
+            start = self.client.post(
+                "/login/start",
+                data={
+                    "username": "user@example.com",
+                    "password": "pw",
+                    "save_credentials": "1",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302)
+            self.assertIn("/login/meter", start.headers["Location"])
+
+            meter = self.client.get(start.headers["Location"], follow_redirects=False)
+            self.assertEqual(meter.status_code, 302)
+            self.assertIn("/login/complete", meter.headers["Location"])
+
+            complete = self.client.get(meter.headers["Location"], follow_redirects=False)
+            self.assertEqual(complete.status_code, 302)
+            self.assertEqual(urlparse(complete.headers["Location"]).path, "/")
+
+        save_cookie.assert_called_once_with("cookie-abc")
+        save_creds.assert_called_once_with("user@example.com", "pw")
+
+    def test_full_login_flow_does_not_save_credentials_when_unchecked(self) -> None:
+        ista_client = mock.Mock()
+        ista_client.login_with_credentials.return_value = True
+        ista_client.get_properties.return_value = [{"CustId": "P-2", "Active": True, "AddressLine1": "Two St"}]
+        ista_client.get_meters.return_value = [
+            {"MeterID": 202, "MeterStatus": "Active", "TypeDescription": "Heat", "MeterNo": "H-2"}
+        ]
+        ista_client.get_session_cookie.return_value = "cookie-def"
+
+        report = SimpleNamespace(
+            selected_meter_id=202,
+            selected_utility="Heat",
+            fetched_count=7,
+            inserted_count=4,
+        )
+
+        with (
+            mock.patch("istadash.main.IstaClient", return_value=ista_client),
+            mock.patch("istadash.main.save_session_cookie") as save_cookie,
+            mock.patch("istadash.main.save_credentials") as save_creds,
+            mock.patch("istadash.main.run_sync", return_value=report),
+        ):
+            start = self.client.post(
+                "/login/start",
+                data={
+                    "username": "user2@example.com",
+                    "password": "pw2",
+                },
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302)
+            self.assertIn("/login/meter", start.headers["Location"])
+
+            meter = self.client.get(start.headers["Location"], follow_redirects=False)
+            self.assertEqual(meter.status_code, 302)
+            self.assertIn("/login/complete", meter.headers["Location"])
+
+            complete = self.client.get(meter.headers["Location"], follow_redirects=False)
+            self.assertEqual(complete.status_code, 302)
+            self.assertEqual(urlparse(complete.headers["Location"]).path, "/")
+
+        save_cookie.assert_called_once_with("cookie-def")
+        save_creds.assert_not_called()
+
+    def test_refresh_auth_expired_auto_relogins_and_finishes(self) -> None:
+        from istadash.ista_client import AuthorizationExpiredError
+
+        self.app.config["SETTINGS"].update_selection(meter_id=101, property_scope="P-1")
+
+        first_report = AuthorizationExpiredError("expired")
+        second_report = SimpleNamespace(
+            selected_meter_id=101,
+            selected_utility="Gas",
+            fetched_count=8,
+            inserted_count=3,
+        )
+
+        ista_client = mock.Mock()
+        ista_client.login_with_credentials.return_value = True
+        ista_client.get_session_cookie.return_value = "renewed-cookie"
+
+        class ImmediateThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                if self._target:
+                    self._target()
+
+        with (
+            mock.patch("istadash.main.load_session_cookie", return_value="stale-cookie"),
+            mock.patch("istadash.main.load_credentials", return_value=("u", "p")),
+            mock.patch("istadash.main.IstaClient", return_value=ista_client),
+            mock.patch("istadash.main.save_session_cookie") as save_cookie,
+            mock.patch("istadash.main.run_sync", side_effect=[first_report, second_report]),
+            mock.patch("istadash.main.threading.Thread", ImmediateThread),
+        ):
+            response = self.client.post("/refresh")
+            self.assertEqual(response.status_code, 202)
+
+            status_response = self.client.get("/api/sync-status")
+            status_data = status_response.get_json() or {}
+            self.assertEqual(status_data.get("status"), "done")
+            self.assertIn("Session renewed automatically", status_data.get("message", ""))
+
+        save_cookie.assert_called_once_with("renewed-cookie")
+
+    def test_refresh_auth_expired_without_saved_credentials_requires_login(self) -> None:
+        from istadash.ista_client import AuthorizationExpiredError
+
+        self.app.config["SETTINGS"].update_selection(meter_id=101, property_scope="P-1")
+
+        class ImmediateThread:
+            def __init__(self, target=None, daemon=None):
+                self._target = target
+
+            def start(self):
+                if self._target:
+                    self._target()
+
+        with (
+            mock.patch("istadash.main.load_session_cookie", return_value="stale-cookie"),
+            mock.patch("istadash.main.load_credentials", return_value=None),
+            mock.patch("istadash.main.run_sync", side_effect=AuthorizationExpiredError("expired")),
+            mock.patch("istadash.main.clear_session_cookie") as clear_cookie,
+            mock.patch("istadash.main.threading.Thread", ImmediateThread),
+        ):
+            response = self.client.post("/refresh")
+            self.assertEqual(response.status_code, 202)
+
+            status_response = self.client.get("/api/sync-status")
+            status_data = status_response.get_json() or {}
+            self.assertEqual(status_data.get("status"), "auth_expired")
+
+        clear_cookie.assert_called_once()
+
+    def test_login_start_redirects_to_property_selection_with_multiple_properties(self) -> None:
+        ista_client = mock.Mock()
+        ista_client.login_with_credentials.return_value = True
+        ista_client.get_properties.return_value = [
+            {"CustId": "P-1", "Active": True, "AddressLine1": "One St"},
+            {"CustId": "P-2", "Active": True, "AddressLine1": "Two St"},
+        ]
+        ista_client.get_session_cookie.return_value = "cookie-multi"
+
+        with mock.patch("istadash.main.IstaClient", return_value=ista_client):
+            response = self.client.post(
+                "/login/start",
+                data={"username": "multi@example.com", "password": "pw"},
+                follow_redirects=False,
+            )
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"Select property", response.data)
+
+    def test_login_select_meter_requires_property_scope(self) -> None:
+        ista_client = mock.Mock()
+        ista_client.login_with_credentials.return_value = True
+        ista_client.get_properties.return_value = [{"CustId": "P-1", "Active": True, "AddressLine1": "One St"}]
+        ista_client.get_session_cookie.return_value = "cookie-xyz"
+
+        with mock.patch("istadash.main.IstaClient", return_value=ista_client):
+            start = self.client.post(
+                "/login/start",
+                data={"username": "user@example.com", "password": "pw"},
+                follow_redirects=False,
+            )
+            self.assertEqual(start.status_code, 302)
+
+        query = parse_qs(urlparse(start.headers["Location"]).query)
+        login_id = query["login_id"][0]
+        response = self.client.get(f"/login/meter?login_id={login_id}", follow_redirects=False)
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(urlparse(response.headers["Location"]).path, "/login")
 
 
 class DesktopEntryPointTests(unittest.TestCase):
