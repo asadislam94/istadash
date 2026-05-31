@@ -106,6 +106,28 @@ body::before {
     font-size: 0.85rem;
 }
 
+.login-form__checkbox {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0.55rem !important;
+    cursor: pointer;
+}
+
+.login-form__checkbox input[type="checkbox"] {
+    width: 1.1rem;
+    height: 1.1rem;
+    flex-shrink: 0;
+    accent-color: var(--accent-2);
+    cursor: pointer;
+}
+
+.login-form__checkbox span {
+    font-size: 0.85rem;
+    color: var(--muted);
+    user-select: none;
+}
+
 .login-form select {
     width: 100%;
     border-radius: 14px;
