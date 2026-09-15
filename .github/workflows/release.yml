@@ -108,15 +108,15 @@ jobs:
           cache: 'gradle'
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
-      - name: Build Release APK
-        run: cd android && ./gradlew assembleRelease
+      - name: Build Debug APK
+        run: cd android && ./gradlew assembleDebug
       - name: Rename APK
-        run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/istadash-android-${{ env.VERSION }}.apk
+        run: mv android/app/build/outputs/apk/debug/app-debug.apk android/app/build/outputs/apk/debug/istadash-android-${{ env.VERSION }}-debug.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: installer-android
-          path: android/app/build/outputs/apk/release/*.apk
+          path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────────────────
