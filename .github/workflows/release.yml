@@ -111,7 +111,7 @@ jobs:
       - name: Build Release APK
         run: cd android && ./gradlew assembleRelease
       - name: Rename APK
-        run: mv android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/istadash-android-${{ env.VERSION }}-unsigned.apk
+        run: mv android/app/build/outputs/apk/release/app-release.apk android/app/build/outputs/apk/release/istadash-android-${{ env.VERSION }}.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
