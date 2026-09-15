@@ -92,21 +92,31 @@ jobs:
             echo "::error::Tag '$GITHUB_REF_NAME' is not reachable from master. Aborting release."
             exit 1
           }
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          sed -i "s/^version = .*/version = \"$VERSION\"/" pyproject.toml
+          sed -i "s/versionName = \".*\"/versionName = \"$VERSION\"/" android/app/build.gradle.kts
+          sed -i "s/versionCode = .*/versionCode = ${{ github.run_number }}/" android/app/build.gradle.kts
       - name: Set up JDK 17
         uses: actions/setup-java@v3
         with:
           java-version: '17'
           distribution: 'temurin'
+          cache: 'gradle'
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
-      - name: Build Debug APK
-        # We build assembleDebug as a placeholder for unsigned releases until a Keystore is added
-        run: cd android && ./gradlew assembleDebug
+      - name: Build Release APK
+        run: cd android && ./gradlew assembleRelease
+      - name: Rename APK
+        run: mv android/app/build/outputs/apk/release/app-release-unsigned.apk android/app/build/outputs/apk/release/istadash-android-${{ env.VERSION }}-unsigned.apk
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: installer-android
-          path: android/app/build/outputs/apk/debug/*.apk
+          path: android/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────────────────
