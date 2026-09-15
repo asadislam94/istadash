@@ -27,10 +27,10 @@
                 {% endif %}
             {% endwith %}
 
-            {% if no_keyring %}
+            {% if no_keyring and not is_android %}
                 <article class="message warning">
                     <strong>No secure keyring detected.</strong>
-                    Your session token will be stored in a plain file instead of the OS credential vault.
+                    Your session token will be stored in a local file.
                     For secure storage, install a Secret Service daemon such as
                     <code>gnome-keyring</code> or <code>kwallet</code>.
                 </article>

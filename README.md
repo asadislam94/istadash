@@ -49,6 +49,7 @@ Local energy dashboard for syncing heat meter readings from the [My ista UK port
 | Linux | Ubuntu 22.04+, Debian 12+, or equivalent |
 | macOS | 13 (Ventura) or later |
 | Windows | 10 or later |
+| Android | 9.0 (Pie / API 28) or later |
 
 No Python installation required for end users — the Briefcase-built installer bundles everything.
 
@@ -63,6 +64,7 @@ Download the pre-built installer for your platform from the [latest GitHub Relea
 | Linux | `IstaDash-<version>-x86_64.AppImage` |
 | macOS | `IstaDash-<version>.dmg` |
 | Windows | `IstaDash-<version>.msi` |
+| Android | `IstaDash-<version>-android-debug.apk` |
 
 ### Linux
 
@@ -79,7 +81,11 @@ Open the `.dmg`, drag IstaDash to Applications, and launch it.
 
 Double-click the `.msi` to install, then launch IstaDash from the Start menu.
 
-> The AppImage bundles Python and all Python dependencies. No `pip install` or `apt install` is needed.
+### Android
+
+Transfer the `.apk` file to your Android device (or drag it into your Android Emulator) and tap to install.
+
+> The AppImage, MSI, and APK bundle Python and all dependencies natively. No `pip install` or `apt install` is needed.
 
 ---
 
@@ -244,6 +250,7 @@ uv run briefcase package windows
 |---|---|---|
 | `ci.yml` | Every push and pull request | Lint (ruff) + tests (pytest) on ubuntu-latest |
 | `release.yml` | Push a `v*.*.*` tag | Builds installers on Linux, macOS, and Windows; creates a GitHub Release |
+| `android.yml` | Every push and pull request | Builds the Android APK natively using Chaquopy and uploads it as an artifact |
 
 To publish a new release:
 
