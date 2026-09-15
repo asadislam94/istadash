@@ -81,7 +81,7 @@ def load_session_cookie() -> str | None:
     if value is not None:
         log.debug("load_session_cookie: loaded from OS keyring")
         return value
-        
+
     log.debug("load_session_cookie: OS keyring unavailable, trying fallback")
     result = _fallback_read()
     if result:
@@ -108,10 +108,10 @@ def save_credentials(username: str, password: str) -> bool:
     if not _has_keyring():
         log.warning("save_credentials: no OS keyring available — credentials NOT saved")
         return False
-    
+
     ok1 = _keyring_set(CREDENTIALS_USERNAME_KEY, username)
     ok2 = _keyring_set(CREDENTIALS_PASSWORD_KEY, password)
-    
+
     if ok1 and ok2:
         log.info("save_credentials: credentials saved to OS keyring")
         return True
@@ -127,7 +127,7 @@ def load_credentials() -> tuple[str, str] | None:
     if username and password:
         log.debug("load_credentials: loaded from OS keyring")
         return username, password
-    
+
     log.debug("load_credentials: keyring unavailable or no credentials stored")
     return None
 
