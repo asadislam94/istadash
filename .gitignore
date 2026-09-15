@@ -29,3 +29,11 @@ htmlcov/
 
 # Windows
 Thumbs.db
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/gradle-8.2.1/
+android/*.zip*

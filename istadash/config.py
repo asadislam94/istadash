@@ -14,8 +14,14 @@ APP_DIR_NAME = "istadash"
 log = logging.getLogger(__name__)
 
 
+def _is_android() -> bool:
+    return hasattr(sys, 'getandroidapilevel')
+
+
 def _get_config_dir() -> Path:
     """Return the platform-appropriate directory for configuration files."""
+    if _is_android():
+        return Path.home() / "istadash_config"
     if sys.platform == "win32":
         base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA")
         if not base:
@@ -30,6 +36,8 @@ def _get_config_dir() -> Path:
 
 def _get_data_dir() -> Path:
     """Return the platform-appropriate directory for application data."""
+    if _is_android():
+        return Path.home() / "istadash_data"
     if sys.platform == "win32":
         base = os.environ.get("LOCALAPPDATA") or os.environ.get("APPDATA")
         if not base:
@@ -61,6 +69,9 @@ def _migrate_legacy_paths() -> None:
       (so a partially-migrated state is safe to re-run).
     - After copying, the old ``APP_DIR_NAME`` directory is removed entirely.
     """
+    if _is_android():
+        return
+
     # Old paths were always these, regardless of platform.
     old_config_dir = Path.home() / ".config" / APP_DIR_NAME
     old_data_dir = Path.home() / ".local" / "share" / APP_DIR_NAME

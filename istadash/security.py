@@ -4,10 +4,16 @@ import json
 import logging
 import warnings
 
-import keyring
-import keyring.errors
-
 from istadash.config import CONFIG_DIR
+
+# ── Conditional import ───────────────────────────────────────────────────────
+try:
+    import keyring
+    import keyring.errors
+    _HAS_KEYRING_MODULE = True
+except ImportError:
+    keyring = None  # type: ignore[assignment]
+    _HAS_KEYRING_MODULE = False
 
 SERVICE_NAME = "istadash"
 TOKEN_KEY = "ista_session_cookie"
@@ -22,34 +28,61 @@ _FALLBACK_FILE = CONFIG_DIR / ".session_token"
 log = logging.getLogger(__name__)
 
 
+# ── Internal helpers (ONLY place that touches keyring.*) ─────────────────────
+def _keyring_get(key: str) -> str | None:
+    if not _HAS_KEYRING_MODULE:
+        return None
+    try:
+        return keyring.get_password(SERVICE_NAME, key)
+    except Exception:
+        return None
+
+def _keyring_set(key: str, value: str) -> bool:
+    if not _HAS_KEYRING_MODULE:
+        return False
+    try:
+        keyring.set_password(SERVICE_NAME, key, value)
+        return True
+    except Exception:
+        return False
+
+def _keyring_delete(key: str) -> None:
+    if not _HAS_KEYRING_MODULE:
+        return
+    try:
+        keyring.delete_password(SERVICE_NAME, key)
+    except Exception:
+        pass
+
+
 def _has_keyring() -> bool:
     """Return True if a real OS keyring backend is available at call time."""
+    if not _HAS_KEYRING_MODULE:
+        return False
     try:
         keyring.get_password(SERVICE_NAME, "__probe__")
         log.debug("_has_keyring: OS keyring is available")
         return True
-    except (keyring.errors.NoKeyringError, Exception) as exc:
+    except Exception as exc:
         log.debug("_has_keyring: no OS keyring — %s", exc)
         return False
 
 
 def save_session_cookie(cookie_value: str) -> None:
-    try:
-        keyring.set_password(SERVICE_NAME, TOKEN_KEY, cookie_value)
+    if _keyring_set(TOKEN_KEY, cookie_value):
         log.info("save_session_cookie: saved to OS keyring")
-    except (keyring.errors.NoKeyringError, Exception) as exc:
-        log.warning("save_session_cookie: keyring unavailable (%s), using fallback file", exc)
+    else:
+        log.warning("save_session_cookie: keyring unavailable, using fallback file")
         _fallback_write(cookie_value)
 
 
 def load_session_cookie() -> str | None:
-    try:
-        value = keyring.get_password(SERVICE_NAME, TOKEN_KEY)
-        if value is not None:
-            log.debug("load_session_cookie: loaded from OS keyring")
-            return value
-    except (keyring.errors.NoKeyringError, Exception) as exc:
-        log.debug("load_session_cookie: keyring unavailable (%s), trying fallback", exc)
+    value = _keyring_get(TOKEN_KEY)
+    if value is not None:
+        log.debug("load_session_cookie: loaded from OS keyring")
+        return value
+
+    log.debug("load_session_cookie: OS keyring unavailable, trying fallback")
     result = _fallback_read()
     if result:
         log.debug("load_session_cookie: loaded from fallback file")
@@ -59,11 +92,8 @@ def load_session_cookie() -> str | None:
 
 
 def clear_session_cookie() -> None:
-    try:
-        keyring.delete_password(SERVICE_NAME, TOKEN_KEY)
-        log.info("clear_session_cookie: removed from OS keyring")
-    except (keyring.errors.NoKeyringError, keyring.errors.PasswordDeleteError, Exception) as exc:
-        log.debug("clear_session_cookie: keyring removal skipped — %s", exc)
+    _keyring_delete(TOKEN_KEY)
+    log.info("clear_session_cookie: removed from OS keyring (if present)")
     _fallback_clear()
 
 
@@ -78,37 +108,35 @@ def save_credentials(username: str, password: str) -> bool:
     if not _has_keyring():
         log.warning("save_credentials: no OS keyring available — credentials NOT saved")
         return False
-    try:
-        keyring.set_password(SERVICE_NAME, CREDENTIALS_USERNAME_KEY, username)
-        keyring.set_password(SERVICE_NAME, CREDENTIALS_PASSWORD_KEY, password)
+
+    ok1 = _keyring_set(CREDENTIALS_USERNAME_KEY, username)
+    ok2 = _keyring_set(CREDENTIALS_PASSWORD_KEY, password)
+
+    if ok1 and ok2:
         log.info("save_credentials: credentials saved to OS keyring")
         return True
-    except Exception as exc:
-        log.warning("save_credentials: failed to save credentials — %s", exc)
+    else:
+        log.warning("save_credentials: failed to save credentials")
         return False
 
 
 def load_credentials() -> tuple[str, str] | None:
     """Return (username, password) from the OS keyring, or None if not stored."""
-    try:
-        username = keyring.get_password(SERVICE_NAME, CREDENTIALS_USERNAME_KEY)
-        password = keyring.get_password(SERVICE_NAME, CREDENTIALS_PASSWORD_KEY)
-        if username and password:
-            log.debug("load_credentials: loaded from OS keyring")
-            return username, password
-    except (keyring.errors.NoKeyringError, Exception) as exc:
-        log.debug("load_credentials: keyring unavailable — %s", exc)
+    username = _keyring_get(CREDENTIALS_USERNAME_KEY)
+    password = _keyring_get(CREDENTIALS_PASSWORD_KEY)
+    if username and password:
+        log.debug("load_credentials: loaded from OS keyring")
+        return username, password
+
+    log.debug("load_credentials: keyring unavailable or no credentials stored")
     return None
 
 
 def clear_credentials() -> None:
     """Remove saved credentials from the OS keyring."""
-    for key in (CREDENTIALS_USERNAME_KEY, CREDENTIALS_PASSWORD_KEY):
-        try:
-            keyring.delete_password(SERVICE_NAME, key)
-            log.info("clear_credentials: removed %s from OS keyring", key)
-        except (keyring.errors.NoKeyringError, keyring.errors.PasswordDeleteError, Exception) as exc:
-            log.debug("clear_credentials: removal skipped for %s — %s", key, exc)
+    _keyring_delete(CREDENTIALS_USERNAME_KEY)
+    _keyring_delete(CREDENTIALS_PASSWORD_KEY)
+    log.info("clear_credentials: removed credentials from OS keyring (if present)")
 
 
 # ── File-based fallback (headless / no Secret Service) ───────────────────────
@@ -144,4 +172,3 @@ def _fallback_clear() -> None:
         log.debug("_fallback_clear: removed fallback file")
     except OSError as exc:
         log.warning("_fallback_clear: could not remove fallback file — %s", exc)
-

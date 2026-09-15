@@ -6,6 +6,7 @@ import logging
 import logging.handlers
 import os
 import secrets
+import sys
 import threading
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -47,8 +48,10 @@ def _setup_log_capture() -> None:
     root = logging.getLogger()
     if any(isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers):
         return
-    # Truncate on startup so each run starts with a clean log.
-    LOG_FILE.write_text("", encoding="utf-8")
+    # Truncate on startup so each run starts with a clean log (skip on Android
+    # where the activity may be recreated mid-session).
+    if not hasattr(sys, 'getandroidapilevel'):
+        LOG_FILE.write_text("", encoding="utf-8")
     handler = logging.handlers.RotatingFileHandler(
         LOG_FILE, maxBytes=1_000_000, backupCount=2, encoding="utf-8"
     )
@@ -106,7 +109,11 @@ def _get_cached_chart(storage: Storage):
 # ---------------------------------------------------------------------------
 # Update check - cached for 2 minutes; also runs on every startup
 # ---------------------------------------------------------------------------
-_CURRENT_VERSION: str = importlib.metadata.version("istadash")
+try:
+    _CURRENT_VERSION: str = importlib.metadata.version("istadash")
+except Exception:
+    _CURRENT_VERSION = "0.0.0"
+
 _RELEASES_URL = "https://api.github.com/repos/asadislam94/istadash/releases/latest"
 _RELEASE_PAGE = "https://github.com/asadislam94/istadash/releases"
 
@@ -123,6 +130,9 @@ def _version_tuple(v: str) -> tuple[int, ...]:
 
 def check_for_update() -> dict | None:
     """Return dict(latest, url) if a newer release exists, else None."""
+    if hasattr(sys, 'getandroidapilevel'):
+        return None
+
     now = datetime.now(UTC)
     if _update_cache["checked_at"] and now - _update_cache["checked_at"] < _UPDATE_CACHE_TTL:
         log.debug("check_for_update: returning cached result (checked at %s)", _update_cache["checked_at"])
@@ -169,6 +179,10 @@ def create_app() -> Flask:
     app.config["SETTINGS"] = settings
     app.config["STORAGE"] = Storage(settings.database_path)
     _setup_log_capture()
+
+    @app.context_processor
+    def inject_platform():
+        return {"is_android": hasattr(sys, 'getandroidapilevel')}
 
     # Warm the update cache in the background so the first browser request
     # to /api/update-check never has to wait on the 5 s network timeout.

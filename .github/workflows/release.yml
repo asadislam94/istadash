@@ -78,11 +78,42 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  build-android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Ensure tag is on master
+        shell: bash
+        run: |
+          git fetch origin master
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || {
+            echo "::error::Tag '$GITHUB_REF_NAME' is not reachable from master. Aborting release."
+            exit 1
+          }
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+      - name: Grant execute permission for gradlew
+        run: chmod +x android/gradlew
+      - name: Build Debug APK
+        # We build assembleDebug as a placeholder for unsigned releases until a Keystore is added
+        run: cd android && ./gradlew assembleDebug
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-android
+          path: android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
+
   # ─────────────────────────────────────────────────────────────────────────
   # Gather all three installers and create the GitHub Release
   # ─────────────────────────────────────────────────────────────────────────
   release:
-    needs: build
+    needs: [build, build-android]
     runs-on: ubuntu-latest
     permissions:
       contents: write  # required to create/edit a release
